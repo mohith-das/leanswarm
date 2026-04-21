@@ -25,7 +25,7 @@ body:
     attributes:
       label: LeanSwarm version
       description: Output of `lean-swarm --version` or package version.
-      placeholder: "0.1.0"
+      placeholder: "0.1.1"
     validations:
       required: true
 
