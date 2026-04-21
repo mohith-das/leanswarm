@@ -7,19 +7,15 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 ## [Unreleased]
 
 ### Added
-- Activation mode support (`lean` and `naive`) and configurable convergence threshold in simulation requests.
-- Deterministic semantic memory retrieval and semantic-context wiring for memory summarization.
-- Lean-vs-naive benchmark mode comparison with runtime, token, estimated-cost, cache, and plotting outputs.
-- Benchmark integration tests and CLI simulation control parsing tests.
-- GitHub issue templates for bug reports, feature requests, benchmark datasets, and local model optimizations.
-- A pull request template aligned to LeanSwarm validation and benchmark reporting.
-- A V2 roadmap document covering multi-world simulation, Monte Carlo execution, intervention testing, replay UX, plugin architecture, large-scale agent targets, and hybrid local+cloud model routing.
+- Minimal Next.js web scaffold under `web/` for pasting simulation JSON and exploring the post-simulation world.
+- Repo hygiene updates to ignore plain `venv/` and common Next.js build artifacts.
+- SQLite-backed semantic memory store with deterministic offline fallback and optional `sqlite-vss` acceleration.
 
 ### Changed
-- Event-driven activation now includes deterministic trigger boosts from volatility and world signals.
-- `lean-swarm simulate` now exposes runtime controls (activation mode, active fraction, max agents, group size, convergence threshold, random seed, and LLM toggle flags).
-- Expanded README benchmark documentation with lean-vs-naive outputs and quality-vs-cost plotting points.
-- Updated contributor guidance with focused invite tracks for performance, research, benchmark, and local-model optimization contributions.
+- README and architecture docs now describe the current Phase 2 runtime instead of the initial Phase 1 baseline.
+- README now documents the minimal web inspector and the current engine shape.
+- Contributing guidance is simplified to match the files present in this repository.
+- Lean activation now stays within the sparse event-driven envelope while convergence scoring blends state deltas, churn, and event novelty.
 
 ## [0.1.0] - 2026-04-21
 

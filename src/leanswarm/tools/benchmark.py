@@ -8,9 +8,9 @@ from statistics import mean
 from time import perf_counter
 from typing import Any
 
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.models import ActivationMode, ModelTier, SimulationRequest, SimulationResult
-from lean_swarm.engine.simulator import LeanSwarmEngine
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.models import ActivationMode, ModelTier, SimulationRequest, SimulationResult
+from leanswarm.engine.simulator import LeanSwarmEngine
 
 
 @dataclass(frozen=True)
@@ -23,7 +23,7 @@ class BenchmarkCase:
     active_agent_fraction: float | None = None
 
 
-DEFAULT_ACTIVE_AGENT_FRACTION = 0.15
+DEFAULT_ACTIVE_AGENT_FRACTION = 0.2
 BENCHMARK_MODES = (ActivationMode.LEAN.value, ActivationMode.NAIVE.value)
 TOKEN_PRICE_PER_1K_USD = {
     ModelTier.FLAGSHIP.value: 0.01,
@@ -103,6 +103,7 @@ async def _run_mode_benchmark(mode: str) -> dict[str, object]:
     cold_scores: list[dict[str, object]] = []
     cold_runtime_seconds = 0.0
     cold_start_snapshot = _router_snapshot(engine)
+    activation_fractions: list[float] = []
 
     for index, case in enumerate(CASES, start=1):
         request = _request_for_case(case, mode)
@@ -124,6 +125,10 @@ async def _run_mode_benchmark(mode: str) -> dict[str, object]:
             tick_count=result.report.tick_count,
             dry_run=engine.settings.dry_run,
         )
+        tick_activation_fractions = [
+            _dict_float(tick.model_dump(), "activation_fraction") for tick in result.ticks
+        ]
+        activation_fractions.extend(tick_activation_fractions)
         cold_runtime_seconds += runtime_seconds
         score = _score_case(case, result)
         cold_scores.append(
@@ -137,6 +142,9 @@ async def _run_mode_benchmark(mode: str) -> dict[str, object]:
                 "cost_usd": cost_total,
                 "runtime_seconds": runtime_seconds,
                 "cache_hit_rate": round(cache_hits_delta / max(1, route_calls_delta), 3),
+                "avg_active_fraction": round(
+                    mean(tick_activation_fractions) if tick_activation_fractions else 0.0, 3
+                ),
             }
         )
 
@@ -169,9 +177,15 @@ async def _run_mode_benchmark(mode: str) -> dict[str, object]:
     direction_scores = [_dict_float(item, "direction") for item in cold_scores]
     structure_scores = [_dict_float(item, "structure") for item in cold_scores]
     diversity_scores = [_dict_float(item, "diversity") for item in cold_scores]
+    activation_scores = [_dict_float(item, "avg_active_fraction") for item in cold_scores]
     prediction_fingerprints = {str(item["prediction_fingerprint"]) for item in cold_scores}
     token_usage_by_tier = dict(engine.router.total_tokens_by_tier)
     estimated_cost_by_tier = _estimate_cost_usd_by_tier(token_usage_by_tier)
+    activation_envelope_hit_rate = round(
+        sum(1 for value in activation_fractions if 0.15 <= value <= 0.25)
+        / max(1, len(activation_fractions)),
+        3,
+    )
 
     return {
         "mode": mode,
@@ -180,11 +194,16 @@ async def _run_mode_benchmark(mode: str) -> dict[str, object]:
         "active_agent_fraction": DEFAULT_ACTIVE_AGENT_FRACTION
         if mode == ActivationMode.LEAN.value
         else 1.0,
+        "requested_active_agent_fraction": DEFAULT_ACTIVE_AGENT_FRACTION
+        if mode == ActivationMode.LEAN.value
+        else 1.0,
         "quality_proxy": round(mean(quality_scores), 3),
         "grounding_score": round(mean(grounding_scores), 3),
         "direction_score": round(mean(direction_scores), 3),
         "structure_score": round(mean(structure_scores), 3),
         "diversity_score": round(mean(diversity_scores), 3),
+        "avg_active_fraction": round(mean(activation_scores), 3) if activation_scores else 0.0,
+        "activation_envelope_hit_rate": activation_envelope_hit_rate,
         "variation_score": round(len(prediction_fingerprints) / len(CASES), 3),
         "token_usage_by_tier": token_usage_by_tier,
         "token_total": sum(token_usage_by_tier.values()),

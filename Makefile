@@ -13,5 +13,5 @@ build:
 	$(PYTHON) -m build
 
 smoke:
-	PYTHONPATH=src $(PYTHON) -m lean_swarm.cli smoke
+	PYTHONPATH=src $(PYTHON) -m leanswarm.cli smoke
 

@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter
-from dataclasses import dataclass, field
 import hashlib
 import random
 import re
-from typing import Iterable, Sequence
+from collections import Counter
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
 
-from lean_swarm.engine.models import AgentState
-
+from leanswarm.engine.models import AgentState
 
 _STOPWORDS = {
     "about",
@@ -103,7 +102,16 @@ _DOMAIN_KEYWORDS = {
 }
 
 _STANCE_VOCAB = ("pragmatic", "cautious", "optimistic", "skeptical")
-_MODALITY_VOCAB = ("analyst", "organizer", "observer", "amplifier", "broker", "watchdog", "translator", "sentinel")
+_MODALITY_VOCAB = (
+    "analyst",
+    "organizer",
+    "observer",
+    "amplifier",
+    "broker",
+    "watchdog",
+    "translator",
+    "sentinel",
+)
 _NAMED_AGENTS = (
     "Aster",
     "Briar",
@@ -292,7 +300,9 @@ def _build_archetype_pool(signals: PopulationSignals) -> list[str]:
                     score *= 1.25
                 scored_pool.append((score, f"{stance}-{modality}-{domain}"))
 
-    ranked = _dedupe_in_order([archetype for _, archetype in sorted(scored_pool, key=lambda item: item[0], reverse=True)])
+    ranked = _dedupe_in_order(
+        [archetype for _, archetype in sorted(scored_pool, key=lambda item: item[0], reverse=True)]
+    )
     return ranked[:96]
 
 
@@ -475,7 +485,10 @@ def _score_domains(
         domain_scores[domain] = score
 
     total = sum(domain_scores.values()) or 1.0
-    return {domain: score / total for domain, score in sorted(domain_scores.items(), key=lambda item: item[1], reverse=True)}
+    return {
+        domain: score / total
+        for domain, score in sorted(domain_scores.items(), key=lambda item: item[1], reverse=True)
+    }
 
 
 def _score_stances(all_terms: Counter[str], seed_document: str, question: str) -> dict[str, float]:
@@ -484,7 +497,9 @@ def _score_stances(all_terms: Counter[str], seed_document: str, question: str) -
     positive_hits = sum(1 for marker in _POSITIVE_MARKERS if marker in combined)
     analytical_hits = sum(1 for marker in _ANALYTICAL_MARKERS if marker in combined)
     uncertainty_hits = sum(
-        1 for marker in ("may", "might", "uncertain", "uncertainty", "possibly", "likely") if marker in combined
+        1
+        for marker in ("may", "might", "uncertain", "uncertainty", "possibly", "likely")
+        if marker in combined
     )
 
     scores = {
@@ -504,15 +519,41 @@ def _score_modalities(
 ) -> dict[str, float]:
     combined_terms = list(all_terms.elements()) + list(world_topics) + list(world_entities)
     combined = " ".join(combined_terms).lower()
-    counts = Counter()
+    counts: Counter[str] = Counter()
     counts["analyst"] += sum(1 for marker in _ANALYTICAL_MARKERS if marker in combined)
-    counts["organizer"] += sum(1 for marker in ("coalition", "mobilize", "organize", "campaign", "community") if marker in combined)
-    counts["observer"] += sum(1 for marker in ("observe", "watch", "monitor", "track", "signal") if marker in combined)
-    counts["amplifier"] += sum(1 for marker in ("message", "narrative", "spread", "media", "broadcast") if marker in combined)
-    counts["broker"] += sum(1 for marker in ("bridge", "negotiate", "mediate", "cross", "exchange") if marker in combined)
-    counts["watchdog"] += sum(1 for marker in ("accountability", "oversight", "risk", "audit", "check") if marker in combined)
-    counts["translator"] += sum(1 for marker in ("translate", "interpret", "frame", "context", "explain") if marker in combined)
-    counts["sentinel"] += sum(1 for marker in ("security", "threat", "alert", "stability", "warning") if marker in combined)
+    counts["organizer"] += sum(
+        1
+        for marker in ("coalition", "mobilize", "organize", "campaign", "community")
+        if marker in combined
+    )
+    counts["observer"] += sum(
+        1 for marker in ("observe", "watch", "monitor", "track", "signal") if marker in combined
+    )
+    counts["amplifier"] += sum(
+        1
+        for marker in ("message", "narrative", "spread", "media", "broadcast")
+        if marker in combined
+    )
+    counts["broker"] += sum(
+        1
+        for marker in ("bridge", "negotiate", "mediate", "cross", "exchange")
+        if marker in combined
+    )
+    counts["watchdog"] += sum(
+        1
+        for marker in ("accountability", "oversight", "risk", "audit", "check")
+        if marker in combined
+    )
+    counts["translator"] += sum(
+        1
+        for marker in ("translate", "interpret", "frame", "context", "explain")
+        if marker in combined
+    )
+    counts["sentinel"] += sum(
+        1
+        for marker in ("security", "threat", "alert", "stability", "warning")
+        if marker in combined
+    )
 
     for modality in _MODALITY_VOCAB:
         counts[modality] += 1
@@ -534,7 +575,9 @@ def _top_terms(terms: Sequence[str], limit: int) -> list[str]:
 
 
 def _top_keys(mapping: dict[str, float], limit: int) -> list[str]:
-    return [key for key, _ in sorted(mapping.items(), key=lambda item: item[1], reverse=True)[:limit]]
+    return [
+        key for key, _ in sorted(mapping.items(), key=lambda item: item[1], reverse=True)[:limit]
+    ]
 
 
 def _extract_terms(text: str) -> list[str]:

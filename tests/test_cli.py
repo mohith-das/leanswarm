@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from lean_swarm.cli import main
+from leanswarm.cli import main
 
 
 def test_smoke_command(capsys, tmp_path, monkeypatch) -> None:

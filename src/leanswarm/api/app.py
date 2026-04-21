@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from fastapi import FastAPI
 
-from lean_swarm import __version__
-from lean_swarm.engine.models import SimulationRequest, SimulationResult
-from lean_swarm.engine.simulator import LeanSwarmEngine
+from leanswarm import __version__
+from leanswarm.engine.models import SimulationRequest, SimulationResult
+from leanswarm.engine.simulator import LeanSwarmEngine
 
 
 def create_app() -> FastAPI:
@@ -28,4 +28,3 @@ def create_app() -> FastAPI:
         return await engine.simulate(request)
 
     return app
-

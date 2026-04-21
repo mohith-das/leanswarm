@@ -8,15 +8,15 @@ from pathlib import Path
 
 import uvicorn
 
-from lean_swarm.api.app import create_app
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.models import ActivationMode, SimulationRequest
-from lean_swarm.engine.simulator import LeanSwarmEngine
-from lean_swarm.tools.benchmark import run_benchmark
+from leanswarm.api.app import create_app
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.models import ActivationMode, SimulationRequest
+from leanswarm.engine.simulator import LeanSwarmEngine
+from leanswarm.tools.benchmark import run_benchmark
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="lean-swarm", description="Lean Swarm CLI")
+    parser = argparse.ArgumentParser(prog="leanswarm", description="Lean Swarm CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     smoke_parser = subparsers.add_parser("smoke", help="Run a deterministic smoke simulation")

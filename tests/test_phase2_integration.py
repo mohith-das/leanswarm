@@ -2,14 +2,29 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
+import random
+from pathlib import Path
+from typing import Any, cast
 
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.memory import HierarchicalMemoryManager
-from lean_swarm.engine.models import AgentState, SimulationRequest, TaskType, TickRecord
-from lean_swarm.engine.simulator import LeanSwarmEngine
+import pytest
+
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.memory import HierarchicalMemoryManager
+from leanswarm.engine.models import (
+    ActivationMode,
+    AgentState,
+    SentimentLabel,
+    SentimentSignal,
+    SimulationRequest,
+    TaskType,
+    TickRecord,
+    WorldProfile,
+)
+from leanswarm.engine.simulator import LeanSwarmEngine
 
 
-def _make_engine(tmp_path) -> LeanSwarmEngine:
+def _make_engine(tmp_path: Path) -> LeanSwarmEngine:
     settings = RuntimeSettings(
         dry_run=True,
         cache_dir=tmp_path / "cache",
@@ -18,12 +33,14 @@ def _make_engine(tmp_path) -> LeanSwarmEngine:
     return LeanSwarmEngine(settings=settings)
 
 
-def test_seed_document_flows_into_world_and_agent_calls(tmp_path, monkeypatch) -> None:
+def test_seed_document_flows_into_world_and_agent_calls(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     engine = _make_engine(tmp_path)
-    captured_calls: list[tuple[TaskType, dict[str, object]]] = []
+    captured_calls: list[tuple[TaskType, dict[str, Any]]] = []
     original_route = engine.router.route
 
-    async def tracking_route(task_type, payload):
+    async def tracking_route(task_type: TaskType | str, payload: dict[str, Any]) -> dict[str, Any]:
         resolved_task = TaskType(task_type)
         captured_calls.append((resolved_task, dict(payload)))
         return await original_route(task_type, payload)
@@ -64,7 +81,7 @@ def test_seed_document_flows_into_world_and_agent_calls(tmp_path, monkeypatch) -
     assert "public sentiment improve" in serialized_payloads
 
 
-def test_population_shows_diversity_and_state_variation(tmp_path) -> None:
+def test_population_shows_diversity_and_state_variation(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     request = SimulationRequest(
         seed_document=(
@@ -97,7 +114,7 @@ def test_population_shows_diversity_and_state_variation(tmp_path) -> None:
     )
 
 
-def test_phase2_ready_request_contract_roundtrips(tmp_path) -> None:
+def test_phase2_ready_request_contract_roundtrips(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     request = SimulationRequest(
         seed_document="Baseline coverage remains noisy but structurally stable.",
@@ -119,7 +136,9 @@ def test_phase2_ready_request_contract_roundtrips(tmp_path) -> None:
     assert request.use_llm is False
 
 
-def test_naive_activation_mode_activates_all_agents_each_tick(tmp_path) -> None:
+def test_naive_activation_mode_activates_all_agents_each_tick(
+    tmp_path: Path,
+) -> None:
     engine = _make_engine(tmp_path)
     request = SimulationRequest(
         seed_document=(
@@ -130,7 +149,7 @@ def test_naive_activation_mode_activates_all_agents_each_tick(tmp_path) -> None:
         rounds=4,
         max_agents=14,
         active_agent_fraction=0.2,
-        activation_mode="naive",
+        activation_mode=ActivationMode.NAIVE,
         random_seed=13,
         use_llm=False,
     )
@@ -140,15 +159,79 @@ def test_naive_activation_mode_activates_all_agents_each_tick(tmp_path) -> None:
     assert all(len(tick.active_agent_ids) == len(result.world.agents) for tick in result.ticks)
 
 
-def test_convergence_threshold_controls_stable_streak_break(tmp_path, monkeypatch) -> None:
+def test_lean_activation_mode_stays_within_sparse_envelope(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    engine = _make_engine(tmp_path)
+    agents = [
+        AgentState(
+            id=f"agent-{index}",
+            name=f"Agent {index}",
+            archetype="optimistic-watchdog-civic",
+            mood=0.4 + (index % 3) * 0.1,
+            energy=0.45 + (index % 2) * 0.08,
+            attention=0.35 + (index % 4) * 0.05,
+        )
+        for index in range(20)
+    ]
+    request = SimulationRequest(
+        seed_document="Calm updates continue with only minor attention shifts.",
+        question="Will the headline remain stable?",
+        rounds=1,
+        max_agents=20,
+        active_agent_fraction=0.18,
+        activation_mode=ActivationMode.LEAN,
+        random_seed=21,
+        use_llm=False,
+    )
+    world_profile = WorldProfile(
+        document_id="doc-1",
+        question=request.question,
+        summary="Calm coverage with moderate uncertainty and low volatility.",
+        tone=SentimentLabel.NEUTRAL,
+        sentiment=SentimentSignal(
+            label=SentimentLabel.NEUTRAL,
+            score=0.0,
+            confidence=0.5,
+        ),
+        focus_terms=["calm", "coverage", "stability"],
+        uncertainty=0.25,
+        salience=0.2,
+        complexity=0.3,
+    )
+
+    def fixed_fraction(*args: object, **kwargs: object) -> float:
+        return 0.2
+
+    monkeypatch.setattr(engine, "_activation_trigger_fraction", fixed_fraction)
+
+    selected, activation_profile = engine._select_active_agents(
+        agents,
+        request=request,
+        rng=random.Random(request.random_seed),
+        world_profile=world_profile,
+        ticks=[],
+    )
+
+    assert 0 < len(selected) < len(agents)
+    assert int(activation_profile["target_count"]) == math.ceil(len(agents) * 0.2)
+    assert len(selected) == int(activation_profile["target_count"])
+    assert len(selected) <= math.ceil(len(agents) * 0.25)
+    assert all(agent.id.startswith("agent-") for agent in selected)
+
+
+def test_convergence_threshold_controls_stable_streak_break(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     engine = _make_engine(tmp_path)
 
     def always_stable(
-        tick_index,
-        active_agents,
-        actions,
-        world_profile,
-        rng,
+        tick_index: int,
+        active_agents: list[AgentState],
+        actions: list[object],
+        world_profile: object,
+        rng: random.Random,
+        **kwargs: Any,
     ) -> TickRecord:
         return TickRecord(
             tick=tick_index,
@@ -177,7 +260,9 @@ def test_convergence_threshold_controls_stable_streak_break(tmp_path, monkeypatc
     assert len(result.ticks) == request.convergence_threshold
 
 
-def test_semantic_retrieval_and_memory_summary_payload_wiring(tmp_path, monkeypatch) -> None:
+def test_semantic_retrieval_and_memory_summary_payload_wiring(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     memory = HierarchicalMemoryManager()
     agent = AgentState(id="agent-1", name="Ava", archetype="optimistic-watchdog-civic")
     memory.add_semantic_hint(agent, "city council reform")
@@ -199,16 +284,19 @@ def test_semantic_retrieval_and_memory_summary_payload_wiring(tmp_path, monkeypa
     assert any("complaint" in item.lower() for item in context)
 
     engine = _make_engine(tmp_path)
-    memory_payloads: list[dict[str, object]] = []
+    memory_payloads: list[dict[str, Any]] = []
     original_route = engine.router.route
 
-    async def tracking_route(task_type, payload):
+    async def tracking_route(task_type: TaskType | str, payload: dict[str, Any]) -> dict[str, Any]:
         resolved = TaskType(task_type)
         if resolved is TaskType.MEMORY_SUMMARY:
             memory_payloads.append(dict(payload))
         return await original_route(task_type, payload)
 
-    monkeypatch.setattr(engine.memory, "should_summarize", lambda _agent: True)
+    def always_summarize(_agent: AgentState) -> bool:
+        return True
+
+    monkeypatch.setattr(engine.memory, "should_summarize", always_summarize)
     monkeypatch.setattr(engine.router, "route", tracking_route)
 
     request = SimulationRequest(
@@ -226,6 +314,9 @@ def test_semantic_retrieval_and_memory_summary_payload_wiring(tmp_path, monkeypa
     asyncio.run(engine.simulate(request))
 
     assert memory_payloads
+    semantic_contexts = [
+        cast(list[object], payload["semantic_context"]) for payload in memory_payloads
+    ]
     assert all("semantic_context" in payload for payload in memory_payloads)
-    assert all(isinstance(payload["semantic_context"], list) for payload in memory_payloads)
-    assert any(payload["semantic_context"] for payload in memory_payloads)
+    assert all(isinstance(context, list) for context in semantic_contexts)
+    assert any(context for context in semantic_contexts)

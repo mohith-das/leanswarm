@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from lean_swarm.api.app import create_app
+from leanswarm.api.app import create_app
 
 
 def test_simulate_endpoint(tmp_path, monkeypatch) -> None:
@@ -24,4 +24,3 @@ def test_simulate_endpoint(tmp_path, monkeypatch) -> None:
     assert response.status_code == 200
     assert payload["report"]["question"] == "Will sentiment improve by next week?"
     assert len(payload["world"]["agents"]) > 0
-

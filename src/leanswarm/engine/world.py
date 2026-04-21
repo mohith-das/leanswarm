@@ -3,10 +3,11 @@ from __future__ import annotations
 import hashlib
 import re
 from collections import Counter, defaultdict
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
+from typing import TypedDict
 
-from lean_swarm.engine.models import (
+from leanswarm.engine.models import (
     SeedDocumentProfile,
     SeedEntity,
     SeedTopic,
@@ -295,10 +296,36 @@ _ENTITY_RE = re.compile(r"\b(?:[A-Z][\w'&.-]*|[A-Z]{2,})(?:\s+(?:[A-Z][\w'&.-]*|
 _WHITESPACE_RE = re.compile(r"\s+")
 
 
+class _EntityRecord(TypedDict):
+    label: str
+    aliases: set[str]
+    mentions: int
+    evidence: list[str]
+    entity_type: str
+
+
+class _EdgeBucket(TypedDict):
+    weight: float
+    count: int
+    evidence: list[str]
+
+
+def _new_entity_record(label: str) -> _EntityRecord:
+    return {
+        "label": label,
+        "aliases": set(),
+        "mentions": 0,
+        "evidence": [],
+        "entity_type": _infer_entity_type(label),
+    }
+
+
 def ingest_seed_document(seed_document: str, question: str = "") -> SeedDocumentProfile:
     source_text, source_path = _load_seed_text(seed_document)
     paragraph_source = source_text.replace("\r\n", "\n").replace("\r", "\n")
-    paragraphs = [segment.strip() for segment in re.split(r"\n{2,}", paragraph_source) if segment.strip()]
+    paragraphs = [
+        segment.strip() for segment in re.split(r"\n{2,}", paragraph_source) if segment.strip()
+    ]
     normalized_text = _normalize_text(source_text)
     sentences = _split_sentences(normalized_text)
     tokens = _tokenize(normalized_text)
@@ -325,7 +352,7 @@ def ingest_seed_document(seed_document: str, question: str = "") -> SeedDocument
 
 
 def extract_entities(profile: SeedDocumentProfile, limit: int = 12) -> list[SeedEntity]:
-    records: dict[str, dict[str, object]] = {}
+    records: dict[str, _EntityRecord] = {}
     sentences = profile.sentences or _split_sentences(profile.normalized_text)
 
     for match in _ENTITY_RE.finditer(profile.source_text):
@@ -335,33 +362,22 @@ def extract_entities(profile: SeedDocumentProfile, limit: int = 12) -> list[Seed
         if len(label.split()) == 1 and label.lower() in _STOPWORDS:
             continue
         key = label.lower()
-        record = records.setdefault(
-            key,
-            {
-                "label": label,
-                "aliases": set(),
-                "mentions": 0,
-                "evidence": [],
-                "entity_type": _infer_entity_type(label),
-            },
-        )
-        record["mentions"] = int(record["mentions"]) + 1
+        record = records.setdefault(key, _new_entity_record(label))
+        record["mentions"] += 1
         if record["label"] != label:
-            aliases = record["aliases"]
-            assert isinstance(aliases, set)
-            aliases.add(label)
+            record["aliases"].add(label)
         evidence = _sentence_hits(sentences, label, limit=2)
         record["evidence"] = _merge_evidence(record["evidence"], evidence, limit=2)
 
     entities = [
         SeedEntity(
             id=_stable_id("entity", key),
-            label=str(record["label"]),
-            entity_type=str(record["entity_type"]),
-            mentions=int(record["mentions"]),
-            score=_entity_score(int(record["mentions"]), str(record["label"])),
-            aliases=sorted(str(alias) for alias in record["aliases"]),
-            evidence=list(record["evidence"]),
+            label=record["label"],
+            entity_type=record["entity_type"],
+            mentions=record["mentions"],
+            score=_entity_score(record["mentions"], record["label"]),
+            aliases=sorted(record["aliases"]),
+            evidence=record["evidence"],
         )
         for key, record in records.items()
     ]
@@ -376,13 +392,17 @@ def extract_topics(
 ) -> list[SeedTopic]:
     entity_list = list(entities) if entities is not None else []
     question_terms = set(profile.question_tokens)
-    content_tokens = [token for token in profile.tokens if token not in _STOPWORDS and len(token) > 2]
+    content_tokens = [
+        token for token in profile.tokens if token not in _STOPWORDS and len(token) > 2
+    ]
     unigram_counts = Counter(content_tokens)
-    phrase_counts = Counter()
-    phrase_evidence: dict[str, list[str]] = defaultdict(list)
+    phrase_counts: Counter[str] = Counter()
+    phrase_evidence: defaultdict[str, list[str]] = defaultdict(list)
 
     for sentence in profile.sentences or _split_sentences(profile.normalized_text):
-        sentence_tokens = [token for token in _tokenize(sentence) if token not in _STOPWORDS and len(token) > 2]
+        sentence_tokens = [
+            token for token in _tokenize(sentence) if token not in _STOPWORDS and len(token) > 2
+        ]
         for size in (2, 3):
             for index in range(0, max(0, len(sentence_tokens) - size + 1)):
                 phrase = " ".join(sentence_tokens[index : index + size])
@@ -417,7 +437,11 @@ def extract_topics(
     entity_labels = [entity.label for entity in entity_list]
     topics: list[SeedTopic] = []
 
-    for label, raw_score in sorted(candidate_scores.items(), key=lambda item: (-item[1], item[0]))[:limit]:
+    sorted_candidates = sorted(
+        candidate_scores.items(),
+        key=lambda item: (-item[1], item[0]),
+    )
+    for label, raw_score in sorted_candidates[:limit]:
         evidence = _sentence_hits(profile.sentences, label, limit=2)
         if not evidence:
             evidence = phrase_evidence.get(label, [])
@@ -509,14 +533,34 @@ def build_world_profile(
     sentiment_signals: Iterable[SentimentSignal] | None = None,
 ) -> WorldProfile:
     extracted_entities = list(entities) if entities is not None else extract_entities(profile)
-    extracted_topics = list(topics) if topics is not None else extract_topics(profile, extracted_entities)
-    extracted_sentiments = list(sentiment_signals) if sentiment_signals is not None else extract_sentiment_signals(profile)
+    extracted_topics = (
+        list(topics) if topics is not None else extract_topics(profile, extracted_entities)
+    )
+    extracted_sentiments = (
+        list(sentiment_signals)
+        if sentiment_signals is not None
+        else extract_sentiment_signals(profile)
+    )
     aggregate_sentiment = _document_sentiment(extracted_sentiments)
 
     top_topic_labels = [topic.label for topic in extracted_topics[:3]]
     top_entity_labels = [entity.label for entity in extracted_entities[:3]]
-    focus_terms = list(dict.fromkeys([*profile.top_terms[:4], *top_topic_labels, *top_entity_labels, *profile.question_tokens[:4]]))
-    summary = _build_summary(top_topic_labels, top_entity_labels, aggregate_sentiment, profile.question)
+    focus_terms = list(
+        dict.fromkeys(
+            [
+                *profile.top_terms[:4],
+                *top_topic_labels,
+                *top_entity_labels,
+                *profile.question_tokens[:4],
+            ]
+        )
+    )
+    summary = _build_summary(
+        top_topic_labels,
+        top_entity_labels,
+        aggregate_sentiment,
+        profile.question,
+    )
 
     uncertainty = _clamp(
         0.25
@@ -557,11 +601,17 @@ def build_world_profile(
 def build_world_graph(profile: SeedDocumentProfile, world_profile: WorldProfile) -> WorldGraph:
     nodes: list[WorldNode] = []
     edges: list[WorldEdge] = []
-    edge_buckets: dict[tuple[str, str, WorldEdgeKind], dict[str, object]] = {}
+    edge_buckets: dict[tuple[str, str, WorldEdgeKind], _EdgeBucket] = {}
 
     document_node_id = _stable_id("node", f"document:{profile.document_id}")
-    question_node_id = _stable_id("node", f"question:{profile.document_id}:{world_profile.question}")
-    sentiment_node_id = _stable_id("node", f"sentiment:{profile.document_id}:{world_profile.sentiment.label.value}")
+    question_node_id = _stable_id(
+        "node",
+        f"question:{profile.document_id}:{world_profile.question}",
+    )
+    sentiment_node_id = _stable_id(
+        "node",
+        f"sentiment:{profile.document_id}:{world_profile.sentiment.label.value}",
+    )
 
     nodes.append(
         WorldNode(
@@ -695,17 +745,21 @@ def build_world_graph(profile: SeedDocumentProfile, world_profile: WorldProfile)
         world_profile=world_profile,
     )
 
-    edges.extend(
-        WorldEdge(
-            source=source,
-            target=target,
-            relation=relation,
-            weight=round(_clamp(float(data["weight"])), 3),
-            count=int(data["count"]),
-            evidence=list(dict.fromkeys(data["evidence"]))[:3],
-        )
-        for (source, target, relation), data in sorted(edge_buckets.items(), key=lambda item: (item[0][2].value, item[0][0], item[0][1]))
+    sorted_edges = sorted(
+        edge_buckets.items(),
+        key=lambda item: (item[0][2].value, item[0][0], item[0][1]),
     )
+    for (source, target, relation), data in sorted_edges:
+        edges.append(
+            WorldEdge(
+                source=source,
+                target=target,
+                relation=relation,
+                weight=round(_clamp(data["weight"]), 3),
+                count=data["count"],
+                evidence=list(dict.fromkeys(data["evidence"]))[:3],
+            )
+        )
 
     nodes.sort(key=lambda node: (node.kind.value, -node.weight, node.label.lower()))
     node_count = len(nodes)
@@ -829,8 +883,8 @@ def _label_matches_any(text: str, labels: Iterable[str]) -> bool:
     return any(_label_matches_text(text, label) for label in labels if label)
 
 
-def _merge_evidence(existing: object, new_evidence: list[str], limit: int = 2) -> list[str]:
-    combined = list(existing) if isinstance(existing, list) else []
+def _merge_evidence(existing: list[str], new_evidence: list[str], limit: int = 2) -> list[str]:
+    combined = existing.copy()
     for item in new_evidence:
         if item not in combined:
             combined.append(item)
@@ -846,7 +900,9 @@ def _title_case_label(label: str) -> str:
     return " ".join(part[:1].upper() + part[1:] if part else part for part in parts)
 
 
-def _sentiment_label(score: float, positive_terms: list[str], negative_terms: list[str]) -> SentimentLabel:
+def _sentiment_label(
+    score: float, positive_terms: list[str], negative_terms: list[str]
+) -> SentimentLabel:
     if positive_terms and negative_terms:
         return SentimentLabel.MIXED
     if score > 0.2:
@@ -864,7 +920,9 @@ def _document_sentiment(signals: list[SentimentSignal]) -> SentimentSignal:
     for signal in reversed(signals):
         if signal.scope == "document":
             return signal
-    return SentimentSignal(label=SentimentLabel.NEUTRAL, score=0.0, confidence=0.0, scope="document")
+    return SentimentSignal(
+        label=SentimentLabel.NEUTRAL, score=0.0, confidence=0.0, scope="document"
+    )
 
 
 def _build_summary(
@@ -876,11 +934,13 @@ def _build_summary(
     topic_fragment = ", ".join(topics[:3]) if topics else "the seed narrative"
     entity_fragment = ", ".join(entities[:2]) if entities else ""
     if entity_fragment:
-        lead = f"The seed document centers on {topic_fragment} and repeatedly names {entity_fragment}"
+        lead = (
+            f"The seed document centers on {topic_fragment} and repeatedly names {entity_fragment}"
+        )
     else:
         lead = f"The seed document centers on {topic_fragment}"
     if question:
-        lead = f"{lead} in response to the question \"{question}\""
+        lead = f'{lead} in response to the question "{question}"'
     tone = sentiment.label.value
     return f"{lead}. Overall tone is {tone} with a score of {sentiment.score:+.2f}."
 
@@ -904,7 +964,7 @@ def _node_focuses_on(question: str, label: str, aliases: Iterable[str]) -> bool:
 
 
 def _add_edge(
-    edge_buckets: dict[tuple[str, str, WorldEdgeKind], dict[str, object]],
+    edge_buckets: dict[tuple[str, str, WorldEdgeKind], _EdgeBucket],
     source: str,
     target: str,
     relation: WorldEdgeKind,
@@ -913,24 +973,26 @@ def _add_edge(
     evidence: Iterable[str],
 ) -> None:
     key = (source, target, relation)
-    bucket = edge_buckets.setdefault(key, {"weight": 0.0, "count": 0, "evidence": []})
-    bucket["weight"] = max(float(bucket["weight"]), weight)
-    bucket["count"] = int(bucket["count"]) + 1
-    bucket_evidence = bucket["evidence"]
-    assert isinstance(bucket_evidence, list)
+    bucket: _EdgeBucket = edge_buckets.setdefault(key, _new_edge_bucket())
+    bucket["weight"] = max(bucket["weight"], weight)
+    bucket["count"] += 1
     for item in evidence:
-        if item not in bucket_evidence:
-            bucket_evidence.append(item)
+        if item not in bucket["evidence"]:
+            bucket["evidence"].append(item)
 
 
 def _add_cooccurrence_edges(
-    edge_buckets: dict[tuple[str, str, WorldEdgeKind], dict[str, object]],
+    edge_buckets: dict[tuple[str, str, WorldEdgeKind], _EdgeBucket],
     *,
     profile: SeedDocumentProfile,
     world_profile: WorldProfile,
 ) -> None:
-    topic_nodes = {topic.id: _stable_id("node", f"topic:{topic.id}") for topic in world_profile.topics}
-    entity_nodes = {entity.id: _stable_id("node", f"entity:{entity.id}") for entity in world_profile.entities}
+    topic_nodes = {
+        topic.id: _stable_id("node", f"topic:{topic.id}") for topic in world_profile.topics
+    }
+    entity_nodes = {
+        entity.id: _stable_id("node", f"entity:{entity.id}") for entity in world_profile.entities
+    }
 
     for sentence in profile.sentences:
         sentence_lower = sentence.lower()
@@ -947,31 +1009,31 @@ def _add_cooccurrence_edges(
             or any(_label_matches_text(sentence_lower, alias) for alias in entity.aliases)
         ]
 
-        for left_index, left in enumerate(matched_topics):
-            for right in matched_topics[left_index + 1 :]:
-                left_node = topic_nodes[left.id]
-                right_node = topic_nodes[right.id]
+        for left_index, left_topic in enumerate(matched_topics):
+            for right_topic in matched_topics[left_index + 1 :]:
+                left_node = topic_nodes[left_topic.id]
+                right_node = topic_nodes[right_topic.id]
                 source, target = sorted((left_node, right_node))
                 _add_edge(
                     edge_buckets,
                     source,
                     target,
                     WorldEdgeKind.CO_OCCURS_WITH,
-                    weight=max(0.15, min(1.0, (left.score + right.score) / 2.0)),
+                    weight=max(0.15, min(1.0, (left_topic.score + right_topic.score) / 2.0)),
                     evidence=[sentence],
                 )
 
-        for left_index, left in enumerate(matched_entities):
-            for right in matched_entities[left_index + 1 :]:
-                left_node = entity_nodes[left.id]
-                right_node = entity_nodes[right.id]
+        for left_index, left_entity in enumerate(matched_entities):
+            for right_entity in matched_entities[left_index + 1 :]:
+                left_node = entity_nodes[left_entity.id]
+                right_node = entity_nodes[right_entity.id]
                 source, target = sorted((left_node, right_node))
                 _add_edge(
                     edge_buckets,
                     source,
                     target,
                     WorldEdgeKind.CO_OCCURS_WITH,
-                    weight=max(0.15, min(1.0, (left.score + right.score) / 2.0)),
+                    weight=max(0.15, min(1.0, (left_entity.score + right_entity.score) / 2.0)),
                     evidence=[sentence],
                 )
 
@@ -1006,3 +1068,5 @@ def _add_cooccurrence_edges(
                         weight=max(0.2, min(1.0, (topic.score + entity.score) / 2.0)),
                         evidence=[f"{topic.label} / {entity.label}"],
                     )
+def _new_edge_bucket() -> _EdgeBucket:
+    return {"weight": 0.0, "count": 0, "evidence": []}

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.simulator import LeanSwarmEngine
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.simulator import LeanSwarmEngine
 
 
 def test_smoke_simulation_returns_world(tmp_path) -> None:
@@ -19,4 +19,3 @@ def test_smoke_simulation_returns_world(tmp_path) -> None:
     assert result.report.tick_count >= 1
     assert len(result.world.agents) <= 50
     assert result.report.llm_calls >= 1
-

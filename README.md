@@ -17,27 +17,43 @@ day one.
 
 ## Quickstart
 
-### Install
+### Install From PyPI
 
 ```bash
-pip install -e .[dev]
-cp .env.example .env
+pip install leanswarm
 ```
+
+This installs the Python package, API, and CLI. Node.js is not required for the core package.
 
 Optional with `uv`:
 
 ```bash
-uv venv
-uv pip install -e .[dev]
+uv pip install leanswarm
+```
+
+### Configure Live Providers
+
+Dry-run mode works without any API keys. If you want live model routing, set one of:
+
+```bash
+export OPENAI_API_KEY=...
+export ANTHROPIC_API_KEY=...
 ```
 
 ### Run
 
 ```bash
-lean-swarm smoke
-lean-swarm simulate --seed examples/seed.txt --question "Will public trust rise this quarter?"
-lean-swarm api
-lean-swarm bench
+leanswarm smoke
+leanswarm simulate --seed examples/seed.txt --question "Will public trust rise this quarter?"
+leanswarm api
+leanswarm bench
+```
+
+### Import In Python
+
+```python
+from leanswarm.engine.models import SimulationRequest
+from leanswarm.engine.simulator import LeanSwarmEngine
 ```
 
 ## Architecture
@@ -49,31 +65,44 @@ lean-swarm bench
 - The engine uses Pydantic schemas at every boundary.
 - LLM calls are retried and concurrency-limited with semaphores.
 
-### Phase 1 engine shape
+### Current engine shape
 
 - Tiered model routing with `FLAGSHIP`, `STANDARD`, and `CHEAP` tiers.
 - Batched group actions for active agents.
-- Archetype pooling with 96 archetypes and up to 50 named agents.
+- Seed-ingestion and world-building helpers that extract topics, entities, and a world graph from the seed document.
+- Seed-conditioned population construction with archetype jittering and bounded named-agent counts.
 - Hybrid numeric state for mood, energy, attention, and relationships.
-- Event-driven activation with a bounded active fraction per tick.
-- Hierarchical memory slices for working, episodic, and semantic references.
+- Sparse activation and trigger heuristics that keep only a subset of agents active per tick.
+- Hierarchical memory slices for working, episodic, and semantic references backed by SQLite with vector-search support and deterministic offline fallback.
 - Disk-backed action caching via `diskcache`.
 - Early convergence detection on low-delta ticks.
+- A minimal Next.js viewer under `web/` for inspecting pasted simulation JSON and exploring the post-simulation world snapshot.
 
 See [docs/architecture.md](docs/architecture.md) for more detail.
+
+### Optional web viewer
+
+The `web/` app is a separate, optional Next.js inspector for pasted simulation JSON. It is not
+required to install or use the Python package or `leanswarm` CLI.
+
+```bash
+cd web
+npm install
+npm run dev
+```
 
 ## CLI Usage
 
 ### Smoke test
 
 ```bash
-lean-swarm smoke
+leanswarm smoke
 ```
 
 ### Simulate a scenario
 
 ```bash
-lean-swarm simulate \
+leanswarm simulate \
   --seed examples/seed.txt \
   --question "Will the policy announcement improve sentiment?" \
   --activation-mode lean \
@@ -83,13 +112,13 @@ lean-swarm simulate \
 ### Run the API
 
 ```bash
-lean-swarm api --host 127.0.0.1 --port 8000
+leanswarm api --host 127.0.0.1 --port 8000
 ```
 
 ### Run the benchmark harness
 
 ```bash
-lean-swarm bench
+leanswarm bench
 ```
 
 ## API Usage
@@ -97,7 +126,7 @@ lean-swarm bench
 ### Start server
 
 ```bash
-lean-swarm api
+leanswarm api
 ```
 
 ### Example request
@@ -114,7 +143,7 @@ curl -X POST http://127.0.0.1:8000/simulate \
 
 ## Benchmarks
 
-`lean-swarm bench` runs the same benchmark cases in both `lean` and `naive` activation modes and
+`leanswarm bench` runs the same benchmark cases in both `lean` and `naive` activation modes and
 returns a comparison payload with:
 
 - top-level deltas: `cost_ratio_naive_to_lean`, `quality_delta_lean_vs_naive`,
@@ -125,21 +154,16 @@ returns a comparison payload with:
   `token_total`, and related fields for quality-vs-cost plotting
 
 This lets you compare lean efficiency against naive full activation and plot quality-vs-cost points
-directly from benchmark output without extra transforms.
+directly from benchmark output without extra transforms. The shipped cases are still lightweight
+proxy benchmarks rather than a full public benchmark pack.
 
 ## Limitations
 
-- The Phase 1 engine uses deterministic mock responses unless live credentials are configured.
-- Semantic memory is scaffolded but not yet backed by a production embedding and retrieval flow.
-- The web client is intentionally minimal at this stage.
-
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for V2 priorities including multi-world simulations, Monte Carlo
-runs, intervention testing, replay UX, plugin architecture, large-scale agent support, and
-hybrid local+cloud routing.
+- Dry-run routing is still heuristic even though it is seed-sensitive and grouped by task type.
+- The benchmark harness is still a compact proxy suite, not a full public-opinion evaluation set.
+- The web client is intentionally minimal, focused on inspecting and exploring simulation JSON.
 
 ## Contributing
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), pick an issue template
-that matches your contribution track, and open a focused PR.
+Contributions are welcome. Please open a focused PR with a clear summary of the behavior change
+and the validation you ran locally.

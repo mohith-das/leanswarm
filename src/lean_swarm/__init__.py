@@ -1,6 +1,16 @@
-"""Lean Swarm package."""
+"""Backward-compatible alias for the renamed `leanswarm` package."""
 
-__all__ = ["__version__"]
+from __future__ import annotations
 
-__version__ = "0.1.0"
+import sys
+from warnings import warn
 
+import leanswarm as _leanswarm
+
+warn(
+    "`lean_swarm` is deprecated; import `leanswarm` instead.",
+    DeprecationWarning,
+    stacklevel=2,
+)
+
+sys.modules[__name__] = _leanswarm

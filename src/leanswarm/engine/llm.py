@@ -5,13 +5,14 @@ import hashlib
 import json
 import os
 import re
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from diskcache import Cache
 
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.logging import JsonlLogger
-from lean_swarm.engine.models import ModelTier, TaskType
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.logging import JsonlLogger
+from leanswarm.engine.models import ModelTier, TaskType
 
 try:
     from litellm import acompletion
@@ -70,7 +71,9 @@ class LiteLLMRouter:
         async with self.semaphore:
             response = await self._call_with_retry(resolved_task, payload, model)
 
-        prompt_tokens = self._estimate_tokens({"task_type": resolved_task.value, "payload": payload})
+        prompt_tokens = self._estimate_tokens(
+            {"task_type": resolved_task.value, "payload": payload}
+        )
         completion_tokens = self._estimate_tokens(response)
         self.prompt_tokens_by_tier[tier.value] += prompt_tokens
         self.completion_tokens_by_tier[tier.value] += completion_tokens
@@ -176,21 +179,29 @@ class LiteLLMRouter:
 
     def _mock_response(self, task_type: TaskType, payload: Mapping[str, Any]) -> dict[str, Any]:
         question = str(payload.get("question", "the outcome"))
-        seed_text = self._payload_text(payload, ("seed_document", "seed_excerpt", "summary", "context"))
+        seed_text = self._payload_text(
+            payload, ("seed_document", "seed_excerpt", "summary", "context")
+        )
         question_terms = self._extract_terms(question, limit=5)
         seed_terms = self._extract_terms(seed_text, limit=8)
 
         if task_type is TaskType.WORLD_BOOTSTRAP:
-            return self._mock_world_bootstrap(question, seed_text, seed_terms, question_terms, payload)
+            return self._mock_world_bootstrap(
+                question, seed_text, seed_terms, question_terms, payload
+            )
 
         if task_type is TaskType.AGENT_BATCH:
             return self._mock_agent_batch(question, seed_text, seed_terms, question_terms, payload)
 
         if task_type is TaskType.MEMORY_SUMMARY:
-            return self._mock_memory_summary(question, seed_text, seed_terms, question_terms, payload)
+            return self._mock_memory_summary(
+                question, seed_text, seed_terms, question_terms, payload
+            )
 
         if task_type is TaskType.PREDICTION_SYNTHESIS:
-            return self._mock_prediction_synthesis(question, seed_text, seed_terms, question_terms, payload)
+            return self._mock_prediction_synthesis(
+                question, seed_text, seed_terms, question_terms, payload
+            )
 
         return {
             "summary": f"World bootstrap completed for {question}.",
@@ -220,7 +231,10 @@ class LiteLLMRouter:
             "topics": topics,
             "entities": entities,
             "sentiment": tone,
-            "pressure_points": [pressure, self._format_terms(entities[:2]) if entities else pressure],
+            "pressure_points": [
+                pressure,
+                self._format_terms(entities[:2]) if entities else pressure,
+            ],
             "agent_count": int(payload.get("agent_count", 0) or 0),
         }
 
@@ -247,7 +261,9 @@ class LiteLLMRouter:
             focus_text = self._format_terms(target_terms)
             stance = self._stance_for_archetype(archetype)
             deltas = self._deltas_for_action(action_type, stance, signature)
-            description = self._describe_agent_action(name, archetype, action_type, focus_text, question, signature)
+            description = self._describe_agent_action(
+                name, archetype, action_type, focus_text, question, signature
+            )
             actions.append(
                 {
                     "agent_id": agent_id,
@@ -293,7 +309,9 @@ class LiteLLMRouter:
         payload: Mapping[str, Any],
     ) -> dict[str, Any]:
         ticks = list(payload.get("ticks", []))
-        signature = self._signature(question, seed_text, ticks, payload.get("agent_count", 0), "prediction")
+        signature = self._signature(
+            question, seed_text, ticks, payload.get("agent_count", 0), "prediction"
+        )
         seed_bias = self._polarity_score(seed_text)
         question_bias = self._polarity_score(question)
         tick_bias = self._tick_bias(ticks)
@@ -323,7 +341,9 @@ class LiteLLMRouter:
             f"Active agent discussion concentrated on {self._format_terms(dominant_terms or question_terms[:3])}.",
         ]
         if combined_bias == 0:
-            rationale.append("Seed and question signals were balanced, so the forecast remains cautious.")
+            rationale.append(
+                "Seed and question signals were balanced, so the forecast remains cautious."
+            )
 
         return {
             "prediction": prediction,
@@ -452,7 +472,9 @@ class LiteLLMRouter:
             return "balanced"
         return "adaptive"
 
-    def _deltas_for_action(self, action_type: str, stance: str, signature: int) -> tuple[float, float, float]:
+    def _deltas_for_action(
+        self, action_type: str, stance: str, signature: int
+    ) -> tuple[float, float, float]:
         mood_base = {
             "uplift": 0.05,
             "pressure": -0.03,

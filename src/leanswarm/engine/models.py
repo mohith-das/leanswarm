@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
 
-class ModelTier(str, Enum):
+class ModelTier(StrEnum):
     FLAGSHIP = "flagship"
     STANDARD = "standard"
     CHEAP = "cheap"
 
 
-class TaskType(str, Enum):
+class TaskType(StrEnum):
     WORLD_BOOTSTRAP = "world_bootstrap"
     AGENT_BATCH = "agent_batch"
     MEMORY_SUMMARY = "memory_summary"
     PREDICTION_SYNTHESIS = "prediction_synthesis"
 
 
-class ActivationMode(str, Enum):
+class ActivationMode(StrEnum):
     LEAN = "lean"
     NAIVE = "naive"
 
@@ -54,6 +54,12 @@ class TickRecord(BaseModel):
     active_agent_ids: list[str] = Field(default_factory=list)
     events: list[str] = Field(default_factory=list)
     mean_delta: float = 0.0
+    activation_fraction: float = Field(default=0.0, ge=0.0, le=1.0)
+    activation_pressure: float = Field(default=0.0, ge=0.0, le=1.0)
+    activation_triggers: list[str] = Field(default_factory=list)
+    relationship_churn: float = Field(default=0.0, ge=0.0, le=1.0)
+    stability_score: float = Field(default=0.0, ge=0.0, le=1.0)
+    convergence_score: float = Field(default=0.0, ge=0.0, le=1.0)
     stable: bool = False
 
 
@@ -80,6 +86,8 @@ class PredictionReport(BaseModel):
     tick_count: int = 0
     llm_calls: int = 0
     cache_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    average_active_fraction: float = Field(default=0.0, ge=0.0, le=1.0)
+    activation_envelope_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0)
 
 
 class RelationshipEdge(BaseModel):
@@ -103,14 +111,14 @@ class SimulationResult(BaseModel):
     world: WorldSnapshot
 
 
-class SentimentLabel(str, Enum):
+class SentimentLabel(StrEnum):
     POSITIVE = "positive"
     NEGATIVE = "negative"
     MIXED = "mixed"
     NEUTRAL = "neutral"
 
 
-class WorldNodeKind(str, Enum):
+class WorldNodeKind(StrEnum):
     DOCUMENT = "document"
     QUESTION = "question"
     ENTITY = "entity"
@@ -118,7 +126,7 @@ class WorldNodeKind(str, Enum):
     SENTIMENT = "sentiment"
 
 
-class WorldEdgeKind(str, Enum):
+class WorldEdgeKind(StrEnum):
     CONTAINS = "contains"
     FOCUSES_ON = "focuses_on"
     MENTIONS = "mentions"

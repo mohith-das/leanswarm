@@ -1,14 +1,16 @@
 # Architecture
 
-## Target shape
+## Current shape
 
 Lean Swarm is organized around a narrow execution core:
 
-- `lean_swarm.engine.llm`: the only module allowed to issue model calls
-- `lean_swarm.engine.simulator`: world state updates, tick execution, convergence detection
-- `lean_swarm.engine.memory`: working, episodic, and semantic memory helpers
-- `lean_swarm.api.app`: HTTP surface area
-- `lean_swarm.cli`: command-line entry points
+- `leanswarm.engine.llm`: the only module allowed to issue model calls
+- `leanswarm.engine.simulator`: world state updates, tick execution, convergence detection
+- `leanswarm.engine.memory`: working, episodic, and semantic memory helpers
+- `leanswarm.engine.semantic_store`: SQLite-backed semantic retrieval with optional `sqlite-vss`
+- `leanswarm.api.app`: HTTP surface area
+- `leanswarm.cli`: command-line entry points
+- `web/`: minimal Next.js viewer for pasting simulation JSON and inspecting the resulting world
 
 ## Mandatory constraints
 
@@ -21,13 +23,16 @@ Lean Swarm is organized around a narrow execution core:
 - Disk caching is used to reduce repeated action generation.
 - The simulation can stop early when the world stabilizes.
 
-## Phase plan assumption
+## Current status
 
-This repository started empty, so the original phase list was not recoverable from local context.
-Phase 1 therefore focuses on a repo-safe foundation:
+The repository now has a usable Phase 2 runtime and a minimal web inspection surface:
 
 - packaging and project metadata
 - CLI and API skeletons
 - baseline simulation engine and router contracts
 - logging, caching, and tests
+- seed-aware world ingestion and population shaping
+- a JSON inspector for the post-simulation world snapshot
 
+The remaining gaps are a broader public benchmark suite, richer convergence heuristics, and a more
+fully featured replay UI.

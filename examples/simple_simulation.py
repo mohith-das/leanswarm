@@ -1,7 +1,7 @@
 import asyncio
 
-from lean_swarm.engine.simulator import LeanSwarmEngine
-from lean_swarm.engine.models import SimulationRequest
+from leanswarm.engine.models import SimulationRequest
+from leanswarm.engine.simulator import LeanSwarmEngine
 
 
 async def main() -> None:
@@ -20,4 +20,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

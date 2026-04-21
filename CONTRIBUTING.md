@@ -29,7 +29,7 @@ Use the matching issue template when opening work in these areas.
 
 ## Guardrails
 
-- Keep all direct LLM traffic inside `src/lean_swarm/engine/llm.py`.
+- Keep all direct LLM traffic inside `src/leanswarm/engine/llm.py`.
 - Preserve structured Pydantic models at request/response boundaries.
 - Add tests for behavior changes.
 - Never commit secrets or local `.env` files.

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 
-from lean_swarm.engine.config import RuntimeSettings
-from lean_swarm.engine.llm import LiteLLMRouter
-from lean_swarm.engine.models import TaskType
+from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.llm import LiteLLMRouter
+from leanswarm.engine.models import TaskType
 
 
 def test_router_records_cache_hit_rate(tmp_path) -> None:
@@ -25,4 +25,3 @@ def test_router_records_cache_hit_rate(tmp_path) -> None:
     assert first == second
     assert router.cache_hits == 1
     assert router.cache_hit_rate > 0
-

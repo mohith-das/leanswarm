@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from lean_swarm.api.app import create_app
+from leanswarm.api.app import create_app
 
 
 def main() -> None:
@@ -18,4 +18,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

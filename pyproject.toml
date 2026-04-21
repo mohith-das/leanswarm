@@ -42,7 +42,7 @@ dev = [
 ]
 
 [project.scripts]
-lean-swarm = "lean_swarm.cli:main"
+leanswarm = "leanswarm.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/mohith-das/leanswarm"
@@ -63,6 +63,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "ASYNC"]
+ignore = ["E501", "UP042"]
 
 [tool.mypy]
 python_version = "3.11"
@@ -74,4 +75,4 @@ check_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_defs = true
 ignore_missing_imports = true
-packages = ["lean_swarm"]
+packages = ["leanswarm"]
