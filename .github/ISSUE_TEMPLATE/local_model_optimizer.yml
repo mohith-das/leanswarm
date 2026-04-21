@@ -1,0 +1,75 @@
+name: Local model optimizer report
+description: Share local inference optimizations and hardware benchmark results.
+title: "[Local Optimizer]: "
+labels:
+  - optimization
+  - local-models
+  - triage
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I can reproduce these results with the command included below.
+          required: true
+        - label: I included model, runtime, and hardware details.
+          required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model and provider/runtime
+      placeholder: "Example: Llama-3.1-8B-Instruct via Ollama v0.x"
+    validations:
+      required: true
+
+  - type: textarea
+    id: hardware
+    attributes:
+      label: Hardware profile
+      placeholder: |
+        CPU:
+        GPU:
+        RAM:
+        OS:
+    validations:
+      required: true
+
+  - type: input
+    id: quantization
+    attributes:
+      label: Quantization / serving config
+      placeholder: "Q4_K_M, context size, batch size, thread count..."
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Benchmark command
+      description: Exact command(s) used to produce results.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: results
+    attributes:
+      label: Lean vs naive results
+      description: Paste relevant JSON fields (`quality_proxy`, `cost_usd_total`, `runtime_seconds`, cache stats).
+      placeholder: |
+        lean:
+          quality_proxy:
+          cost_usd_total:
+          runtime_seconds:
+        naive:
+          quality_proxy:
+          cost_usd_total:
+          runtime_seconds:
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Quality and stability notes
+      description: Any regressions, hallucinations, or convergence differences observed.

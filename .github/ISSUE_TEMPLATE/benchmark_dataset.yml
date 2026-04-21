@@ -1,0 +1,84 @@
+name: Benchmark dataset proposal
+description: Contribute or propose benchmark data/tasks for LeanSwarm evaluation.
+title: "[Benchmark]: "
+labels:
+  - benchmark
+  - dataset
+  - triage
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I verified this dataset can be shared under its stated license.
+          required: true
+        - label: I included enough detail for reproduction.
+          required: true
+
+  - type: input
+    id: dataset_name
+    attributes:
+      label: Dataset name
+      placeholder: "Example: Public Opinion Weekly Digest"
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Source URL
+      placeholder: "https://..."
+    validations:
+      required: true
+
+  - type: input
+    id: license
+    attributes:
+      label: Dataset license
+      placeholder: "MIT / CC BY 4.0 / custom terms"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: task_type
+    attributes:
+      label: Task type
+      options:
+        - Forecasting
+        - Narrative classification
+        - Sentiment trajectory
+        - Counterfactual intervention
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: structure
+    attributes:
+      label: Data structure and splits
+      description: Include schema, record counts, and train/val/test splits if applicable.
+      placeholder: |
+        Schema:
+        Splits:
+        Total rows:
+    validations:
+      required: true
+
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline metrics (if available)
+      description: Include existing benchmark numbers and evaluation method.
+
+  - type: textarea
+    id: integration
+    attributes:
+      label: Integration plan
+      description: How should this be wired into `lean-swarm bench`?
+      placeholder: |
+        - Case generation:
+        - Scoring changes:
+        - Output fields:
+    validations:
+      required: true

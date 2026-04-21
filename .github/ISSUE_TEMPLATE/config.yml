@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/mohith-das/leanswarm/discussions
+    about: Please use Discussions for Q&A, setup help, and general ideas.
+  - name: Security disclosures
+    url: https://github.com/mohith-das/leanswarm/security/advisories/new
+    about: Please report security issues privately through GitHub Advisories.

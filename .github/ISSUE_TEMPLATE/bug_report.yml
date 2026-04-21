@@ -1,0 +1,98 @@
+name: Bug report
+description: Report a reproducible bug in LeanSwarm.
+title: "[Bug]: "
+labels:
+  - bug
+  - triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough detail for us to reproduce quickly.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-flight checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I can reproduce this on the latest main branch or latest release.
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: LeanSwarm version
+      description: Output of `lean-swarm --version` or package version.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - CLI
+        - API
+        - Simulation engine
+        - Benchmark harness
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Activation mode
+      description: If applicable.
+      options:
+        - lean
+        - naive
+        - both
+        - not applicable
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Exact commands, inputs, and files used.
+      placeholder: |
+        1. Run `lean-swarm ...`
+        2. Use seed ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and tracebacks
+      description: Paste relevant output (remove secrets).
+      render: shell
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: |
+        OS:
+        Python:
+        Install method (pip/uv):
+        Model provider (if any):

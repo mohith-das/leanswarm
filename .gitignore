@@ -1,0 +1,14 @@
+.env
+.env.local
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+.leanswarm/
+coverage.xml
+
