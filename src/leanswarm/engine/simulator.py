@@ -143,11 +143,17 @@ class LeanSwarmEngine:
                 ]
             )
 
-            actions = [
-                AgentAction.model_validate(action)
-                for response in batch_responses
-                for action in response.get("actions", [])
-            ]
+            from pydantic import ValidationError
+            actions = []
+            active_agent_ids = {agent.id for agent in active_agents}
+            for response in batch_responses:
+                for action in response.get("actions", []):
+                    if isinstance(action, dict) and action.get("agent_id") not in active_agent_ids:
+                        continue
+                    try:
+                        actions.append(AgentAction.model_validate(action))
+                    except ValidationError:
+                        continue
             tick = self._apply_actions(
                 tick_index,
                 active_agents,

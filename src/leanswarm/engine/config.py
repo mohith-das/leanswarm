@@ -29,6 +29,8 @@ class RuntimeSettings(BaseModel):
     flagship_model: str = "gpt-4.1"
     standard_model: str = "gpt-4.1-mini"
     cheap_model: str = "gpt-4.1-nano"
+    api_base: str | None = None
+    api_key: str | None = None
 
     @classmethod
     def from_env(cls) -> RuntimeSettings:
@@ -63,6 +65,8 @@ class RuntimeSettings(BaseModel):
             flagship_model=os.getenv("LEANSWARM_FLAGSHIP_MODEL", "gpt-4.1"),
             standard_model=os.getenv("LEANSWARM_STANDARD_MODEL", "gpt-4.1-mini"),
             cheap_model=os.getenv("LEANSWARM_CHEAP_MODEL", "gpt-4.1-nano"),
+            api_base=os.getenv("LEANSWARM_API_BASE"),
+            api_key=os.getenv("LEANSWARM_API_KEY"),
         )
 
     def ensure_dirs(self) -> None:

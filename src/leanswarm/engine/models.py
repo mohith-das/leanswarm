@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class ModelTier(StrEnum):
@@ -47,6 +48,17 @@ class AgentAction(BaseModel):
     delta_mood: float = 0.0
     delta_energy: float = 0.0
     delta_attention: float = 0.0
+
+    @field_validator("delta_mood", "delta_energy", "delta_attention", mode="before")
+    @classmethod
+    def coerce_and_clamp_delta(cls, v: Any) -> float:
+        if v is None:
+            return 0.0
+        try:
+            val = float(v)
+            return max(-0.25, min(0.25, val))
+        except (ValueError, TypeError):
+            return 0.0
 
 
 class TickRecord(BaseModel):
@@ -225,6 +237,90 @@ class SeedWorld(BaseModel):
     ingestion: SeedDocumentProfile
     profile: WorldProfile
     graph: WorldGraph
+
+
+class WorldBootstrapResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    summary: str = ""
+    topics: list[str] = Field(default_factory=list)
+    entities: list[str] = Field(default_factory=list)
+    sentiment: str = ""
+    pressure_points: list[str] = Field(default_factory=list)
+
+    @field_validator("topics", "entities", "pressure_points", mode="before")
+    @classmethod
+    def coerce_list(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        if not isinstance(v, list):
+            try:
+                v = list(v)
+            except Exception:
+                return [str(v)]
+        return [str(x) for x in v]
+
+
+class AgentBatchResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    actions: list[AgentAction] = Field(default_factory=list)
+
+
+class MemorySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    summary: str = ""
+    topics: list[str] = Field(default_factory=list)
+    retained_signals: list[str] = Field(default_factory=list)
+
+    @field_validator("topics", "retained_signals", mode="before")
+    @classmethod
+    def coerce_list(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        if not isinstance(v, list):
+            try:
+                v = list(v)
+            except Exception:
+                return [str(v)]
+        return [str(x) for x in v]
+
+
+class PredictionSynthesisResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    prediction: str
+    confidence: float = 0.5
+    rationale: list[str] = Field(default_factory=list)
+    direction: str = ""
+    supporting_terms: list[str] = Field(default_factory=list)
+    volatility: str = ""
+
+    @field_validator("rationale", "supporting_terms", mode="before")
+    @classmethod
+    def coerce_list(cls, v: Any) -> list[str]:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            return [v]
+        if not isinstance(v, list):
+            try:
+                v = list(v)
+            except Exception:
+                return [str(v)]
+        return [str(x) for x in v]
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def coerce_confidence(cls, v: Any) -> float:
+        try:
+            val = float(v)
+            if val > 1.0 and val <= 100.0:
+                val = val / 100.0
+            return max(0.0, min(1.0, val))
+        except (ValueError, TypeError):
+            return 0.5
 
 
 WorldSnapshot.model_rebuild()

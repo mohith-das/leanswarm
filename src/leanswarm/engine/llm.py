@@ -9,15 +9,78 @@ from collections.abc import Mapping
 from typing import Any
 
 from diskcache import Cache
+from pydantic import BaseModel
 
 from leanswarm.engine.config import RuntimeSettings
 from leanswarm.engine.logging import JsonlLogger
-from leanswarm.engine.models import ModelTier, TaskType
+from leanswarm.engine.models import (
+    AgentBatchResponse,
+    MemorySummaryResponse,
+    ModelTier,
+    PredictionSynthesisResponse,
+    TaskType,
+    WorldBootstrapResponse,
+)
+from leanswarm.engine.prompts import system_prompt
 
 try:
     from litellm import acompletion
 except ImportError:  # pragma: no cover
     acompletion = None
+
+
+def extract_json_object(text: str) -> dict[str, Any] | None:
+    text = text.strip()
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+
+    stripped = text
+    if stripped.startswith("```"):
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1 :]
+        else:
+            stripped = stripped[3:]
+        if stripped.endswith("```"):
+            stripped = stripped[:-3]
+        stripped = stripped.strip()
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        stripped = text[start : end + 1]
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
+
+_RESPONSE_MODELS: dict[TaskType, type[BaseModel]] = {
+    TaskType.WORLD_BOOTSTRAP: WorldBootstrapResponse,
+    TaskType.AGENT_BATCH: AgentBatchResponse,
+    TaskType.MEMORY_SUMMARY: MemorySummaryResponse,
+    TaskType.PREDICTION_SYNTHESIS: PredictionSynthesisResponse,
+}
+
+
+class LiveCredentialsError(Exception):
+    def __init__(self, model: str, missing_keys: list[str]) -> None:
+        msg = f"Live mode requested for model '{model}' but missing env keys: {', '.join(missing_keys)}. Set the key, set LEANSWARM_API_KEY/LEANSWARM_API_BASE, or run with LEANSWARM_DRY_RUN=true."
+        super().__init__(msg)
 
 
 class LiteLLMRouter:
@@ -49,18 +112,30 @@ class LiteLLMRouter:
         resolved_task = TaskType(task_type)
         tier = self._tier_for_task(resolved_task)
         model = self._model_for_tier(tier)
-        cache_key = self._cache_key(resolved_task, payload, model)
+
+        live = self._decide_live(payload, model)
+        cache_key = self._cache_key(resolved_task, payload, model, live)
 
         self.route_calls += 1
-        cached_response = self.cache.get(cache_key)
-        if cached_response is not None:
+        cached_entry = self.cache.get(cache_key)
+        if cached_entry is not None:
             self.cache_hits += 1
+            if isinstance(cached_entry, dict) and "response" in cached_entry and "mode" in cached_entry:
+                cached_response = cached_entry["response"]
+                cached_mode = cached_entry["mode"]
+            else:
+                cached_response = cached_entry
+                cached_mode = "unknown"
+
             self.logger.log(
                 {
                     "task_type": resolved_task.value,
                     "tier": tier.value,
                     "model": model,
                     "cached": True,
+                    "mode": "cached",
+                    "cached_mode": cached_mode,
+                    "token_source": "none",
                     "prompt_tokens": 0,
                     "completion_tokens": 0,
                     "total_tokens": 0,
@@ -69,22 +144,31 @@ class LiteLLMRouter:
             return dict(cached_response)
 
         async with self.semaphore:
-            response = await self._call_with_retry(resolved_task, payload, model)
+            response, mode, prompt_usage, completion_usage = await self._call_with_retry(
+                resolved_task, payload, model, live
+            )
 
-        prompt_tokens = self._estimate_tokens(
-            {"task_type": resolved_task.value, "payload": payload}
-        )
-        completion_tokens = self._estimate_tokens(response)
+        if prompt_usage is not None and completion_usage is not None:
+            prompt_tokens = prompt_usage
+            completion_tokens = completion_usage
+            token_source = "usage"
+        else:
+            prompt_tokens = self._estimate_tokens({"task_type": resolved_task.value, "payload": payload})
+            completion_tokens = self._estimate_tokens(response)
+            token_source = "estimated" if mode in ("live", "mock", "mock_fallback") else "none"
+
         self.prompt_tokens_by_tier[tier.value] += prompt_tokens
         self.completion_tokens_by_tier[tier.value] += completion_tokens
 
-        self.cache.set(cache_key, response)
+        self.cache.set(cache_key, {"response": response, "mode": mode})
         self.logger.log(
             {
                 "task_type": resolved_task.value,
                 "tier": tier.value,
                 "model": model,
                 "cached": False,
+                "mode": mode,
+                "token_source": token_source,
                 "prompt_tokens": prompt_tokens,
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
@@ -93,59 +177,108 @@ class LiteLLMRouter:
         return response
 
     async def _call_with_retry(
-        self, task_type: TaskType, payload: Mapping[str, Any], model: str
-    ) -> dict[str, Any]:
-        use_llm = bool(payload.get("use_llm", True))
+        self, task_type: TaskType, payload: Mapping[str, Any], model: str, live: bool
+    ) -> tuple[dict[str, Any], str, int | None, int | None]:
+        if not live:
+            return self._mock_response(task_type, payload), "mock", None, None
+
         for attempt in range(1, self.settings.retry_attempts + 1):
             try:
-                if self.settings.dry_run or not use_llm or not self._has_live_credentials():
-                    return self._mock_response(task_type, payload)
                 return await self._live_response(task_type, payload, model)
             except Exception as exc:  # pragma: no cover
                 if attempt == self.settings.retry_attempts:
                     raise exc
                 await asyncio.sleep(0.2 * attempt)
-        return self._mock_response(task_type, payload)
+        return self._mock_response(task_type, payload), "mock", None, None
 
     async def _live_response(
         self, task_type: TaskType, payload: Mapping[str, Any], model: str
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], str, int | None, int | None]:
         if acompletion is None:
-            return self._mock_response(task_type, payload)
+            return self._mock_response(task_type, payload), "mock_fallback", None, None
 
-        completion = await acompletion(
-            model=model,
-            temperature=0,
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "Return compact JSON for the requested simulation task. "
-                        "Do not add markdown fences."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": json.dumps(
-                        {"task_type": task_type.value, "payload": payload},
-                        sort_keys=True,
-                        default=str,
-                    ),
-                },
-            ],
+        user_content = json.dumps(
+            {"task_type": task_type.value, "payload": payload},
+            sort_keys=True,
+            default=str,
         )
-        message = completion.choices[0].message.content or "{}"
+        sys_prompt = system_prompt(task_type)
+
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {"role": "system", "content": sys_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            "response_format": {"type": "json_object"},
+        }
+        if self.settings.api_base is not None:
+            kwargs["api_base"] = self.settings.api_base
+        if self.settings.api_key is not None:
+            kwargs["api_key"] = self.settings.api_key
+
         try:
-            parsed = json.loads(message)
-        except json.JSONDecodeError:
-            parsed = {
-                "prediction": message.strip(),
-                "confidence": 0.5,
-                "rationale": ["Model returned non-JSON content."],
+            completion = await acompletion(**kwargs)
+        except Exception as e:
+            if "response_format" in str(e).lower():
+                kwargs.pop("response_format")
+                completion = await acompletion(**kwargs)
+            else:
+                raise
+
+        prompt_tokens = None
+        completion_tokens = None
+        if hasattr(completion, "usage") and completion.usage:
+            usage = completion.usage
+            prompt_tokens = getattr(usage, "prompt_tokens", None)
+            completion_tokens = getattr(usage, "completion_tokens", None)
+
+        message = completion.choices[0].message.content or ""
+        parsed = extract_json_object(message)
+
+        response_model = _RESPONSE_MODELS[task_type]
+        validation_error = ""
+
+        if parsed is None:
+            validation_error = "response was not a JSON object"
+        else:
+            try:
+                model_instance = response_model.model_validate(parsed)
+                return model_instance.model_dump(), "live", prompt_tokens, completion_tokens
+            except Exception as e:
+                validation_error = str(e)
+
+        repair_messages = kwargs["messages"].copy()
+        err_msg = validation_error[:500]
+        raw_msg = message[:500]
+        repair_messages.append(
+            {
+                "role": "user",
+                "content": f"Your previous response failed validation: {err_msg}. Previous response: {raw_msg}. Return ONLY the corrected JSON object matching the schema.",
             }
-        if isinstance(parsed, dict):
-            return parsed
-        return {"value": parsed}
+        )
+        kwargs["messages"] = repair_messages
+        completion = await acompletion(**kwargs)
+
+        prompt_tokens = None
+        completion_tokens = None
+        if hasattr(completion, "usage") and completion.usage:
+            usage = completion.usage
+            prompt_tokens = getattr(usage, "prompt_tokens", None)
+            completion_tokens = getattr(usage, "completion_tokens", None)
+
+        message = completion.choices[0].message.content or ""
+        parsed = extract_json_object(message)
+
+        if parsed is None:
+            return self._mock_response(task_type, payload), "mock_fallback", prompt_tokens, completion_tokens
+
+        try:
+            model_instance = response_model.model_validate(parsed)
+            return model_instance.model_dump(), "live", prompt_tokens, completion_tokens
+        except Exception:
+            return self._mock_response(task_type, payload), "mock_fallback", prompt_tokens, completion_tokens
 
     def _tier_for_task(self, task_type: TaskType) -> ModelTier:
         if task_type is TaskType.PREDICTION_SYNTHESIS:
@@ -161,16 +294,58 @@ class LiteLLMRouter:
             return self.settings.standard_model
         return self.settings.cheap_model
 
-    def _cache_key(self, task_type: TaskType, payload: Mapping[str, Any], model: str) -> str:
+    def _decide_live(self, payload: Mapping[str, Any], model: str) -> bool:
+        use_llm = bool(payload.get("use_llm", True))
+        if self.settings.dry_run or not use_llm:
+            return False
+        
+        ready, missing = self._live_ready(model)
+        if not ready:
+            raise LiveCredentialsError(model, missing)
+        return True
+
+    def _cache_key(
+        self, task_type: TaskType, payload: Mapping[str, Any], model: str, live: bool
+    ) -> str:
         serialized = json.dumps(
-            {"task_type": task_type.value, "payload": payload, "model": model},
+            {"v": 2, "task_type": task_type.value, "payload": payload, "model": model, "live": live},
             sort_keys=True,
             default=str,
         )
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
-    def _has_live_credentials(self) -> bool:
-        return bool(os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY"))
+    def _live_ready(self, model: str) -> tuple[bool, list[str]]:
+        """Return (ready, missing_keys) for live calls against `model`."""
+        if self.settings.api_key:
+            return True, []
+
+        try:
+            from litellm import validate_environment
+            res = validate_environment(model=model)
+            return res.get("keys_in_environment", False), res.get("missing_keys", [])
+        except Exception:
+            pass
+
+        _PROVIDER_ENV_KEYS = {
+            "openai": ["OPENAI_API_KEY"],
+            "anthropic": ["ANTHROPIC_API_KEY"],
+            "deepseek": ["DEEPSEEK_API_KEY"],
+            "minimax": ["MINIMAX_API_KEY"],
+            "zhipuai": ["ZHIPUAI_API_KEY"],
+            "zai": ["ZHIPUAI_API_KEY"],
+            "gemini": ["GEMINI_API_KEY"],
+            "groq": ["GROQ_API_KEY"],
+            "mistral": ["MISTRAL_API_KEY"],
+            "xai": ["XAI_API_KEY"],
+            "openrouter": ["OPENROUTER_API_KEY"],
+            "ollama": [],
+        }
+        prefix = model.split("/", 1)[0] if "/" in model else "openai"
+        if prefix not in _PROVIDER_ENV_KEYS:
+            return True, []
+
+        missing = [k for k in _PROVIDER_ENV_KEYS[prefix] if not os.getenv(k)]
+        return len(missing) == 0, missing
 
     def _estimate_tokens(self, payload: Any) -> int:
         serialized = json.dumps(payload, sort_keys=True, default=str)
