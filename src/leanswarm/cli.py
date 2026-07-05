@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -20,11 +21,17 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     smoke_parser = subparsers.add_parser("smoke", help="Run a deterministic smoke simulation")
+    smoke_mode_group = smoke_parser.add_mutually_exclusive_group()
+    smoke_mode_group.add_argument("--live", action="store_true", help="Enable live LLM mode for this run")
+    smoke_mode_group.add_argument("--dry-run", action="store_true", help="Force dry-run mode for this run")
     smoke_parser.set_defaults(handler=handle_smoke)
 
     simulate_parser = subparsers.add_parser(
         "simulate", help="Run a simulation from a seed document and prediction question"
     )
+    sim_mode_group = simulate_parser.add_mutually_exclusive_group()
+    sim_mode_group.add_argument("--live", action="store_true", help="Enable live LLM mode for this run")
+    sim_mode_group.add_argument("--dry-run", action="store_true", help="Force dry-run mode for this run")
     simulate_parser.add_argument("--seed", required=True, help="Path to a seed document")
     simulate_parser.add_argument("--question", required=True, help="Prediction question")
     simulate_parser.add_argument("--rounds", type=int, default=6, help="Maximum tick count")
@@ -75,6 +82,10 @@ def build_parser() -> argparse.ArgumentParser:
     api_parser.add_argument("--port", type=int, default=None, help="API port override")
     api_parser.set_defaults(handler=handle_api)
 
+    doctor_parser = subparsers.add_parser("doctor", help="Check live mode credentials and models")
+    doctor_parser.add_argument("--ping", action="store_true", help="Make a test API call for each model")
+    doctor_parser.set_defaults(handler=handle_doctor)
+
     bench_parser = subparsers.add_parser("bench", help="Run the benchmark harness")
     bench_parser.set_defaults(handler=handle_bench)
 
@@ -87,13 +98,29 @@ def main(argv: Sequence[str] | None = None) -> int:
     return int(args.handler(args))
 
 
-def handle_smoke(_: argparse.Namespace) -> int:
-    result = asyncio.run(LeanSwarmEngine().smoke_test())
+
+
+def _get_settings(args: argparse.Namespace) -> RuntimeSettings:
+    settings = RuntimeSettings.from_env()
+    if getattr(args, "live", False):
+        settings.dry_run = False
+    elif getattr(args, "dry_run", False):
+        settings.dry_run = True
+    mode = "dry-run" if settings.dry_run else "live"
+    print(
+        f"leanswarm: mode={mode} flagship={settings.flagship_model} standard={settings.standard_model} cheap={settings.cheap_model}",
+        file=sys.stderr,
+    )
+    return settings
+
+def handle_smoke(args: argparse.Namespace) -> int:
+    settings = _get_settings(args)
+    result = asyncio.run(LeanSwarmEngine(settings=settings).smoke_test())
     print(result.model_dump_json(indent=2))
     return 0
 
-
 def handle_simulate(args: argparse.Namespace) -> int:
+    settings = _get_settings(args)
     seed_path = Path(args.seed)
     request = SimulationRequest(
         seed_document=seed_path.read_text(encoding="utf-8"),
@@ -107,10 +134,61 @@ def handle_simulate(args: argparse.Namespace) -> int:
         random_seed=args.random_seed,
         use_llm=args.use_llm,
     )
-    result = asyncio.run(LeanSwarmEngine().simulate(request))
+    result = asyncio.run(LeanSwarmEngine(settings=settings).simulate(request))
     print(result.model_dump_json(indent=2))
     return 0
 
+
+def handle_doctor(args: argparse.Namespace) -> int:
+    settings = RuntimeSettings.from_env()
+    mode = "dry-run" if settings.dry_run else "live"
+    print(f"mode: {mode}")
+    print(f"flagship: {settings.flagship_model}")
+    print(f"standard: {settings.standard_model}")
+    print(f"cheap: {settings.cheap_model}")
+    print(f"api_base: {settings.api_base}")
+    print(f"LEANSWARM_API_KEY: {'set' if settings.api_key else 'unset'}")
+
+    from leanswarm.engine.llm import LiteLLMRouter
+    router = LiteLLMRouter(settings)
+    models = list(dict.fromkeys([settings.flagship_model, settings.standard_model, settings.cheap_model]))
+    
+    exit_code = 0
+    for model in models:
+        ready, missing = router._live_ready(model)
+        status = "ok" if ready else f"missing: {', '.join(missing)}"
+        if not ready:
+            exit_code = 1
+        print(f"\nmodel '{model}' credentials: {status}")
+
+        if args.ping:
+            try:
+                from litellm import acompletion
+                kwargs = {
+                    "model": model,
+                    "max_tokens": 16,
+                    "messages": [
+                        {"role": "system", "content": 'Reply with exactly {"ok": true}'},
+                        {"role": "user", "content": "ping"}
+                    ]
+                }
+                if settings.api_base is not None:
+                    kwargs["api_base"] = settings.api_base
+                if settings.api_key is not None:
+                    kwargs["api_key"] = settings.api_key
+
+                import time
+                start_t = time.perf_counter()
+                asyncio.run(acompletion(**kwargs))
+                latency = int((time.perf_counter() - start_t) * 1000)
+                print(f"  ping: ok ({latency}ms)")
+            except Exception as e:
+                exit_code = 1
+                msg_lines = str(e).split("\n", 1)
+                first_line = msg_lines[0] if msg_lines else "Unknown error"
+                print(f"  ping: {type(e).__name__}: {first_line}")
+
+    return exit_code
 
 def handle_api(args: argparse.Namespace) -> int:
     settings = RuntimeSettings.from_env()
