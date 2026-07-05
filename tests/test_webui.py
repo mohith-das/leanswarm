@@ -176,3 +176,57 @@ def test_limits(client):
     req["seed_document"] = "a" * 30000
     res = client.post("/api/runs", json=req)
     assert res.status_code == 422
+    req = {
+        "seed_document": "seed",
+        "question": "q",
+        "rounds": 100,
+        "live": False,
+        "models": {"flagship": "x", "standard": "y", "cheap": "z"}
+    }
+    res = client.post("/api/runs", json=req)
+    assert res.status_code == 422
+
+    req["rounds"] = 4
+    req["seed_document"] = "a" * 30000
+    res = client.post("/api/runs", json=req)
+    assert res.status_code == 422
+
+def test_get_run_privacy(client):
+    req = {
+        "seed_document": "seed",
+        "question": "q",
+        "live": False,
+        "models": {"flagship": "x", "standard": "y", "cheap": "z"}
+    }
+    
+    # User A registers and saves a run privately
+    client.post("/api/auth/register", json={"email": "usera@example.com", "password": "password123"})
+    run_id = client.post("/api/runs", json=req).json()["id"]
+    wait_for_run(client, run_id)
+    res = client.post(f"/api/runs/{run_id}/save", json={})
+    assert res.status_code == 200
+
+    # User A can get the run
+    res = client.get(f"/api/runs/{run_id}")
+    assert res.status_code == 200
+
+    # Logout and try to get run anonymously -> 404
+    client.post("/api/auth/logout")
+    res = client.get(f"/api/runs/{run_id}")
+    assert res.status_code == 404
+
+    # User B registers and tries to get User A's private run -> 404
+    client.post("/api/auth/register", json={"email": "userb@example.com", "password": "password123"})
+    res = client.get(f"/api/runs/{run_id}")
+    assert res.status_code == 404
+
+    # User A logs back in, publishes it
+    client.post("/api/auth/logout")
+    client.post("/api/auth/login", json={"email": "usera@example.com", "password": "password123"})
+    res = client.post(f"/api/runs/{run_id}/publish", json={})
+    assert res.status_code == 200
+
+    # Now anonymous can get it
+    client.post("/api/auth/logout")
+    res = client.get(f"/api/runs/{run_id}")
+    assert res.status_code == 200

@@ -165,9 +165,28 @@ def create_webui_app() -> FastAPI:
         return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/api/runs/{id}")
-    def get_run(id: str, request: Request):
+    def get_run(id: str, request: Request, user: sqlite3.Row | None = Depends(get_current_user)):  # noqa: B008
+        c: sqlite3.Connection = request.app.state.db
+        row = c.execute("SELECT * FROM runs WHERE id = ?", (id,)).fetchone()
+        
+        # If it's in the DB, enforce privacy
+        if row:
+            if not row["is_public"] and (user is None or row["user_id"] != user["id"]):
+                raise HTTPException(404, "Run not found")
+            return {
+                "id": row["id"],
+                "status": "complete",
+                "request": json.loads(row["request_json"]),
+                "models": json.loads(row["models_json"]),
+                "result": json.loads(row["result_json"]),
+                "is_public": bool(row["is_public"])
+            }
+            
+        # If it's not in the DB, check memory
         job = run_manager.jobs.get(id)
         if job:
+            if job.owner_user_id is not None and (user is None or job.owner_user_id != user["id"]):
+                raise HTTPException(404, "Run not found")
             return {
                 "id": job.id,
                 "status": job.status,
@@ -176,20 +195,8 @@ def create_webui_app() -> FastAPI:
                 "result": job.result,
                 "error": job.error
             }
-        
-        c: sqlite3.Connection = request.app.state.db
-        row = c.execute("SELECT * FROM runs WHERE id = ?", (id,)).fetchone()
-        if not row:
-            raise HTTPException(404, "Run not found")
             
-        return {
-            "id": row["id"],
-            "status": "complete",
-            "request": json.loads(row["request_json"]),
-            "models": json.loads(row["models_json"]),
-            "result": json.loads(row["result_json"]),
-            "is_public": bool(row["is_public"])
-        }
+        raise HTTPException(404, "Run not found")
 
     @app.post("/api/runs/{id}/save")
     def save_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row = Depends(require_user)):  # noqa: B008

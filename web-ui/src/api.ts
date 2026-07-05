@@ -19,8 +19,54 @@ async function request(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
+interface TierModels { flagship: string; standard: string; cheap: string }
+
+export interface StartRunRequest {
+  seed_document: string;
+  question: string;
+  rounds: number;
+  max_agents: number;
+  group_size: number;
+  active_agent_fraction: number;
+  convergence_threshold: number;
+  random_seed: number;
+  live: boolean;
+  models: TierModels;
+  credentials: Record<string, string>;
+  api_base?: string | null;
+  api_key?: string | null;
+  title?: string | null;
+}
+
+export interface EstimateRequest {
+  rounds: number;
+  max_agents: number;
+  group_size: number;
+  active_agent_fraction: number;
+  models: TierModels;
+}
+
+export interface DoctorRequest {
+  models: TierModels;
+  credentials: Record<string, string>;
+  api_base?: string | null;
+  api_key?: string | null;
+  ping: boolean;
+}
+
 export const api = {
-  startRun: (data: any) => request('/api/runs', { method: 'POST', body: JSON.stringify(data) }),
+  startRun: (data: StartRunRequest) => request('/api/runs', { method: 'POST', body: JSON.stringify(data) }),
   getRun: (id: string) => request(`/api/runs/${id}`),
-  estimate: (data: any) => request('/api/estimate', { method: 'POST', body: JSON.stringify(data) }),
+  estimate: (data: EstimateRequest) => request('/api/estimate', { method: 'POST', body: JSON.stringify(data) }),
+  doctor: (data: DoctorRequest) => request('/api/doctor', { method: 'POST', body: JSON.stringify(data) }),
+  saveRun: (id: string, title?: string) => request(`/api/runs/${id}/save`, { method: 'POST', body: JSON.stringify({ title }) }),
+  publishRun: (id: string, title?: string) => request(`/api/runs/${id}/publish`, { method: 'POST', body: JSON.stringify({ title }) }),
+  myRuns: () => request('/api/runs'),
+  deleteRun: (id: string) => request(`/api/runs/${id}`, { method: 'DELETE' }),
+  gallery: (limit: number, offset: number) => request(`/api/gallery?limit=${limit}&offset=${offset}`),
+  galleryItem: (id: string) => request(`/api/gallery/${id}`),
+  register: (email: string, password: string) => request('/api/auth/register', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  login: (email: string, password: string) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => request('/api/auth/logout', { method: 'POST' }),
+  me: () => request('/api/auth/me'),
 };

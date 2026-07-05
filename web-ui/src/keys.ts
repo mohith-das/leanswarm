@@ -32,3 +32,16 @@ export function collectCredentials(models: string[]): Record<string, string> {
   }
   return result;
 }
+
+export function getOverrides(): { api_base?: string; api_key?: string } {
+  let stored: Record<string, string> = {};
+  try {
+    stored = JSON.parse(localStorage.getItem("leanswarm.keys.v1") || "{}");
+  } catch {
+    stored = {};
+  }
+  const out: { api_base?: string; api_key?: string } = {};
+  if (stored.LEANSWARM_API_BASE) out.api_base = stored.LEANSWARM_API_BASE;
+  if (stored.LEANSWARM_API_KEY) out.api_key = stored.LEANSWARM_API_KEY;
+  return out;
+}
