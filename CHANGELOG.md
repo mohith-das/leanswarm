@@ -6,6 +6,14 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+### Added
+- Web UI: a full single-page application built with React/Vite to compose, execute, and save simulation runs in the browser.
+- Web UI API endpoints under `/api` including authentication, runs management, cost estimation, doctor ping, and gallery browsing.
+- SQLite-based persistence for user accounts, sessions, and saved/published simulation runs.
+- Detailed progress callback for `LeanSwarmEngine.simulate()` to push realtime events over SSE.
+- `leanswarm ui` subcommand to start the web backend, which serves both the API and the built static frontend assets.
+- Live cost tracking and price estimations for supported foundation models.
+
 ## [0.2.0] - 2026-07-05
 
 ### Added

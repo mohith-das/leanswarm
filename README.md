@@ -106,6 +106,29 @@ npm run dev
 
 ## CLI Usage
 
+### Web UI
+
+```bash
+pip install leanswarm
+leanswarm ui
+```
+Open `http://127.0.0.1:8000` in your browser. The UI supports both mock and live modes. You can bring your own API keys, which are stored exclusively in your browser and used securely in memory per run.
+
+**Hosting configuration:**
+To run behind a TLS proxy, set `LEANSWARM_UI_SECURE_COOKIES=true`. To restrict registration, set `LEANSWARM_UI_ALLOW_SIGNUP=false`.
+
+| Environment Variable | Default | Meaning |
+|---|---|---|
+| `LEANSWARM_UI_DATA_DIR` | `.leanswarm/ui` | Holds SQLite DB and per-run logs |
+| `LEANSWARM_UI_ALLOW_SIGNUP` | `true` | Set to false to close registration |
+| `LEANSWARM_UI_SECURE_COOKIES` | `false` | Set to true when hosted behind HTTPS |
+| `LEANSWARM_UI_MAX_ROUNDS` | `12` | Max allowed rounds |
+| `LEANSWARM_UI_MAX_AGENTS` | `48` | Max allowed agents |
+| `LEANSWARM_UI_MAX_SEED_CHARS` | `20000` | Max chars for seed document |
+| `LEANSWARM_UI_MAX_CONCURRENT_RUNS` | `2` | Concurrent simulation runs |
+| `LEANSWARM_UI_RUNS_PER_HOUR_PER_IP` | `10` | 0 disables rate limiting |
+| `LEANSWARM_UI_RETENTION_SECONDS` | `7200` | Delay before purging ephemeral jobs |
+
 ### Smoke test
 
 ```bash

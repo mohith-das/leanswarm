@@ -18,3 +18,5 @@ web/.vercel/
 web/node_modules/
 web/out/
 *.tsbuildinfo
+web-ui/node_modules/
+web-ui/dist/

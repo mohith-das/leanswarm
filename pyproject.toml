@@ -44,6 +44,9 @@ dev = [
 [project.scripts]
 leanswarm = "leanswarm.cli:main"
 
+[tool.setuptools.package-data]
+"leanswarm.webui" = ["static/**/*"]
+
 [project.urls]
 Homepage = "https://github.com/mohith-das/leanswarm"
 Repository = "https://github.com/mohith-das/leanswarm.git"
