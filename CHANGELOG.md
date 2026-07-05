@@ -6,6 +6,29 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-05
+
+### Added
+- Provider-agnostic live routing: credentials are resolved per model via LiteLLM's
+  environment validation with a static fallback map covering DeepSeek, MiniMax, Zhipu GLM,
+  Gemini, Groq, Mistral, xAI, OpenRouter, and Ollama.
+- `LEANSWARM_API_BASE` / `LEANSWARM_API_KEY` overrides for any OpenAI-compatible endpoint.
+- Schema-aware live prompts per task type with robust JSON extraction, Pydantic validation,
+  a single automatic repair attempt, and an explicit logged `mock_fallback` as last resort.
+- `leanswarm doctor [--ping]` subcommand for verifying live-mode configuration and
+  connectivity, plus `--live` / `--dry-run` flags on `smoke` and `simulate`.
+- Live token accounting from `completion.usage` with `token_source` recorded in call logs.
+
+### Changed
+- Live mode now fails loudly with `LiveCredentialsError` when credentials are missing
+  instead of silently returning mock responses.
+- Cache keys include the live/mock routing decision and a version marker so mock responses
+  can never be replayed into live runs.
+- LLM call logs record `mode` (`mock`, `live`, `cached`, `mock_fallback`) for every route.
+
+### Fixed
+- Removed the tracked Python 3.9 `venv/` from version control and tightened `.gitignore`.
+
 ## [0.1.1] - 2026-04-21
 
 ### Added
