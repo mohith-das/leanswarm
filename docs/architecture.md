@@ -10,7 +10,8 @@ Lean Swarm is organized around a narrow execution core:
 - `leanswarm.engine.semantic_store`: SQLite-backed semantic retrieval with optional `sqlite-vss`
 - `leanswarm.api.app`: HTTP surface area
 - `leanswarm.cli`: command-line entry points
-- `web/`: minimal Next.js viewer for pasting simulation JSON and inspecting the resulting world
+- `leanswarm.webui`: React/Vite web application and FastAPI backend to compose, run, and explore simulations.
+- `web/`: legacy minimal Next.js viewer (superseded by `leanswarm.webui`).
 
 ## Mandatory constraints
 
@@ -25,14 +26,13 @@ Lean Swarm is organized around a narrow execution core:
 
 ## Current status
 
-The repository now has a usable Phase 2 runtime and a minimal web inspection surface:
+The repository now has a usable Phase 2 runtime and a fully-featured Web UI:
 
 - packaging and project metadata
 - CLI and API skeletons
 - baseline simulation engine and router contracts
 - logging, caching, and tests
 - seed-aware world ingestion and population shaping
-- a JSON inspector for the post-simulation world snapshot
+- a single-page React Web UI with real-time SSE streaming, cost estimates, network graphs, and SQLite persistence.
 
-The remaining gaps are a broader public benchmark suite, richer convergence heuristics, and a more
-fully featured replay UI.
+The remaining gaps are a broader public benchmark suite and richer convergence heuristics.

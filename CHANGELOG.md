@@ -6,6 +6,8 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-05
+
 ### Added
 - Web UI: a full single-page application built with React/Vite to compose, execute, and save simulation runs in the browser.
 - Web UI API endpoints under `/api` including authentication, runs management, cost estimation, doctor ping, and gallery browsing.
