@@ -14,6 +14,7 @@ from leanswarm.engine.config import RuntimeSettings
 from leanswarm.engine.models import ActivationMode, SimulationRequest
 from leanswarm.engine.simulator import LeanSwarmEngine
 from leanswarm.tools.benchmark import run_benchmark
+from leanswarm.webui.app import create_webui_app
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -88,6 +89,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     bench_parser = subparsers.add_parser("bench", help="Run the benchmark harness")
     bench_parser.set_defaults(handler=handle_bench)
+
+    ui_parser = subparsers.add_parser("ui", help="Run the Web UI server")
+    ui_parser.add_argument("--host", default=None, help="API host override")
+    ui_parser.add_argument("--port", type=int, default=None, help="API port override")
+    ui_parser.set_defaults(handler=handle_ui)
 
     return parser
 
@@ -203,6 +209,19 @@ def handle_bench(_: argparse.Namespace) -> int:
     print(json.dumps(result, indent=2))
     return 0
 
+
+def handle_ui(args: argparse.Namespace) -> int:
+    from leanswarm.webui.config import WebUISettings
+    settings = RuntimeSettings.from_env()
+    host = args.host or settings.api_host
+    port = args.port or settings.api_port
+    
+    webui_settings = WebUISettings.from_env()
+    signup_status = "on" if webui_settings.allow_signup else "off"
+    print(f"leanswarm ui: serving on http://{host}:{port} (signup={signup_status})", file=sys.stderr)
+    
+    uvicorn.run(create_webui_app(), host=host, port=port)
+    return 0
 
 if __name__ == "__main__":
     raise SystemExit(main())
