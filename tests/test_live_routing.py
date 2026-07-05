@@ -5,7 +5,7 @@ import pytest
 
 from leanswarm.engine.config import RuntimeSettings
 from leanswarm.engine.llm import LiteLLMRouter, LiveCredentialsError, extract_json_object
-from leanswarm.engine.models import AgentAction, TaskType
+from leanswarm.engine.models import AgentAction, TaskType, SimulationRequest
 from leanswarm.engine.simulator import LeanSwarmEngine
 
 
@@ -193,3 +193,40 @@ def test_end_to_end_dry_run():
     engine = LeanSwarmEngine(RuntimeSettings(dry_run=True))
     result = asyncio.run(engine.smoke_test())
     assert result.report.prediction
+
+def test_router_credential_resolution(monkeypatch):
+    settings = RuntimeSettings(dry_run=False)
+    settings.credentials = {"DEEPSEEK_API_KEY": "k"}
+    router = LiteLLMRouter(settings)
+
+    import litellm
+    def mock_validate_raise(model):
+        raise Exception("force static map")
+    monkeypatch.setattr(litellm, "validate_environment", mock_validate_raise)
+
+    # _live_ready with dict fallback
+    ready, missing = router._live_ready("deepseek/deepseek-chat")
+    assert ready is True
+    assert not missing
+
+    assert router._resolve_api_key("deepseek/deepseek-chat") == "k"
+
+    settings.api_key = "global"
+    assert router._resolve_api_key("deepseek/deepseek-chat") == "global"
+
+def test_progress_callback():
+    engine = LeanSwarmEngine(RuntimeSettings(dry_run=True))
+    
+    events = []
+    async def collect(evt):
+        events.append(evt)
+        
+    request = SimulationRequest(seed_document="seed", question="q", rounds=1)
+    asyncio.run(engine.simulate(request, on_progress=collect))
+    
+    assert any(e.get("phase") == "bootstrap" and e.get("status") == "running" for e in events)
+    assert any(e.get("phase") == "bootstrap" and e.get("status") == "done" for e in events)
+    assert any(e.get("phase") == "simulation" and e.get("status") == "running" for e in events)
+    assert any(e.get("type") == "tick" and "prompt_tokens_total" in e for e in events)
+    assert any(e.get("phase") == "synthesis" and e.get("status") == "running" for e in events)
+    assert any(e.get("phase") == "synthesis" and e.get("status") == "done" for e in events)
