@@ -77,6 +77,21 @@ _RESPONSE_MODELS: dict[TaskType, type[BaseModel]] = {
 }
 
 
+_PROVIDER_ENV_KEYS = {
+    "openai": ["OPENAI_API_KEY"],
+    "anthropic": ["ANTHROPIC_API_KEY"],
+    "deepseek": ["DEEPSEEK_API_KEY"],
+    "minimax": ["MINIMAX_API_KEY"],
+    "zhipuai": ["ZHIPUAI_API_KEY"],
+    "zai": ["ZHIPUAI_API_KEY"],
+    "gemini": ["GEMINI_API_KEY"],
+    "groq": ["GROQ_API_KEY"],
+    "mistral": ["MISTRAL_API_KEY"],
+    "xai": ["XAI_API_KEY"],
+    "openrouter": ["OPENROUTER_API_KEY"],
+    "ollama": [],
+}
+
 class LiveCredentialsError(Exception):
     def __init__(self, model: str, missing_keys: list[str]) -> None:
         msg = f"Live mode requested for model '{model}' but missing env keys: {', '.join(missing_keys)}. Set the key, set LEANSWARM_API_KEY/LEANSWARM_API_BASE, or run with LEANSWARM_DRY_RUN=true."
@@ -94,6 +109,10 @@ class LiteLLMRouter:
         self.cache_hits = 0
         self.prompt_tokens_by_tier = {tier.value: 0 for tier in ModelTier}
         self.completion_tokens_by_tier = {tier.value: 0 for tier in ModelTier}
+        self.prompt_tokens_total: int = 0
+        self.completion_tokens_total: int = 0
+        self.prompt_tokens_by_model: dict[str, int] = {}
+        self.completion_tokens_by_model: dict[str, int] = {}
 
     @property
     def cache_hit_rate(self) -> float:
@@ -159,6 +178,14 @@ class LiteLLMRouter:
 
         self.prompt_tokens_by_tier[tier.value] += prompt_tokens
         self.completion_tokens_by_tier[tier.value] += completion_tokens
+        self.prompt_tokens_total += prompt_tokens
+        self.completion_tokens_total += completion_tokens
+        
+        if model not in self.prompt_tokens_by_model:
+            self.prompt_tokens_by_model[model] = 0
+            self.completion_tokens_by_model[model] = 0
+        self.prompt_tokens_by_model[model] += prompt_tokens
+        self.completion_tokens_by_model[model] += completion_tokens
 
         self.cache.set(cache_key, {"response": response, "mode": mode})
         self.logger.log(
@@ -215,8 +242,10 @@ class LiteLLMRouter:
         }
         if self.settings.api_base is not None:
             kwargs["api_base"] = self.settings.api_base
-        if self.settings.api_key is not None:
-            kwargs["api_key"] = self.settings.api_key
+        
+        resolved_key = self._resolve_api_key(model)
+        if resolved_key is not None:
+            kwargs["api_key"] = resolved_key
 
         try:
             completion = await acompletion(**kwargs)
@@ -326,26 +355,26 @@ class LiteLLMRouter:
         except Exception:
             pass
 
-        _PROVIDER_ENV_KEYS = {
-            "openai": ["OPENAI_API_KEY"],
-            "anthropic": ["ANTHROPIC_API_KEY"],
-            "deepseek": ["DEEPSEEK_API_KEY"],
-            "minimax": ["MINIMAX_API_KEY"],
-            "zhipuai": ["ZHIPUAI_API_KEY"],
-            "zai": ["ZHIPUAI_API_KEY"],
-            "gemini": ["GEMINI_API_KEY"],
-            "groq": ["GROQ_API_KEY"],
-            "mistral": ["MISTRAL_API_KEY"],
-            "xai": ["XAI_API_KEY"],
-            "openrouter": ["OPENROUTER_API_KEY"],
-            "ollama": [],
-        }
         prefix = model.split("/", 1)[0] if "/" in model else "openai"
         if prefix not in _PROVIDER_ENV_KEYS:
             return True, []
 
-        missing = [k for k in _PROVIDER_ENV_KEYS[prefix] if not os.getenv(k)]
+        missing = [
+            k for k in _PROVIDER_ENV_KEYS[prefix] 
+            if not (self.settings.credentials.get(k) or os.getenv(k))
+        ]
         return len(missing) == 0, missing
+
+    def _resolve_api_key(self, model: str) -> str | None:
+        """Explicit key for this model: generic override first, then per-provider."""
+        if self.settings.api_key:
+            return self.settings.api_key
+        prefix = model.split("/", 1)[0] if "/" in model else "openai"
+        for env_name in _PROVIDER_ENV_KEYS.get(prefix, []):
+            value = self.settings.credentials.get(env_name)
+            if value:
+                return value
+        return None
 
     def _estimate_tokens(self, payload: Any) -> int:
         serialized = json.dumps(payload, sort_keys=True, default=str)

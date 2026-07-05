@@ -4,7 +4,7 @@ import asyncio
 import math
 import random
 import re
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from statistics import mean
 from typing import Any
 
@@ -62,7 +62,15 @@ class LeanSwarmEngine:
             )
         )
 
-    async def simulate(self, request: SimulationRequest) -> SimulationResult:
+    async def simulate(
+        self, 
+        request: SimulationRequest,
+        on_progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+    ) -> SimulationResult:
+        async def _emit(event: dict[str, Any]) -> None:
+            if on_progress is not None:
+                await on_progress(event)
+
         rng = random.Random(request.random_seed)
         self.graph = nx.Graph()
         self.memory.reset_scope()
@@ -83,6 +91,8 @@ class LeanSwarmEngine:
         stable_streak = 0
         converged = False
 
+        await _emit({"type": "phase", "phase": "bootstrap", "status": "running", "agent_count": len(agents)})
+
         bootstrap = await self.router.route(
             TaskType.WORLD_BOOTSTRAP,
             {
@@ -99,7 +109,10 @@ class LeanSwarmEngine:
         )
         self._apply_bootstrap_hints(agents, seed_world.profile, bootstrap)
 
+        await _emit({"type": "phase", "phase": "bootstrap", "status": "done"})
+
         for tick_index in range(1, request.rounds + 1):
+            await _emit({"type": "phase", "phase": "simulation", "status": "running", "tick": tick_index, "rounds": request.rounds})
             active_agents, activation_profile = self._select_active_agents(
                 agents,
                 request=request,
@@ -173,6 +186,13 @@ class LeanSwarmEngine:
             self._finalize_tick(tick, prior_ticks=ticks, world_profile=seed_world.profile)
             ticks.append(tick)
             self.tick_logger.log(tick.model_dump())
+            await _emit({
+                "type": "tick", 
+                "record": tick.model_dump(), 
+                "prompt_tokens_total": self.router.prompt_tokens_total, 
+                "completion_tokens_total": self.router.completion_tokens_total, 
+                "llm_calls": self.router.route_calls
+            })
 
             if tick.stable:
                 stable_streak += 1
@@ -182,6 +202,8 @@ class LeanSwarmEngine:
             if stable_streak >= request.convergence_threshold:
                 converged = True
                 break
+
+        await _emit({"type": "phase", "phase": "synthesis", "status": "running"})
 
         synthesis = await self.router.route(
             TaskType.PREDICTION_SYNTHESIS,
@@ -217,6 +239,7 @@ class LeanSwarmEngine:
             seed_world=seed_world,
             population_summary=population.profile.summary if population.profile else None,
         )
+        await _emit({"type": "phase", "phase": "synthesis", "status": "done"})
         return SimulationResult(request=request, report=report, ticks=ticks, world=world)
 
     def build_archetype_pool(

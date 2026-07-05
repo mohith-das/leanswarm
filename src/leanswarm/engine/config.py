@@ -31,6 +31,7 @@ class RuntimeSettings(BaseModel):
     cheap_model: str = "gpt-4.1-nano"
     api_base: str | None = None
     api_key: str | None = None
+    credentials: dict[str, str] = Field(default_factory=dict)
 
     @classmethod
     def from_env(cls) -> RuntimeSettings:
