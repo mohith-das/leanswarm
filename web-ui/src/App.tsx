@@ -41,7 +41,9 @@ function Shell() {
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <h1 className="logo">leanswarm</h1>
+        <Link to="/" className="logo-link">
+          <h1 className="logo">leanswarm</h1>
+        </Link>
         <Link to="/" className="btn btn-accent w-full">+ New simulation</Link>
         {me && (
           <div className="sidebar-section">

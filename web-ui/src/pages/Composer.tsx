@@ -1,17 +1,17 @@
 import { useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { getRequiredKeys, collectCredentials, getOverrides } from '../keys';
+import { collectCredentials, getOverrides, getAvailableProviders, PROVIDER_MODELS, PROVIDER_LABELS } from '../keys';
 import CostEstimate from '../components/CostEstimate';
 
-const MODEL_PRESETS = [
-  'gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano',
-  'deepseek/deepseek-chat', 'deepseek/deepseek-reasoner',
-  'zhipuai/glm-4-air', 'minimax/minimax-text-01',
-  'gemini/gemini-2.5-flash', 'gemini/gemini-2.5-pro',
-  'groq/llama-3.3-70b-versatile', 'mistral/mistral-small-latest',
-  'anthropic/claude-sonnet-5',
-];
+function ModelDatalist({ id, provider }: { id: string; provider: string }) {
+  const suggestions = PROVIDER_MODELS[provider] || [];
+  return (
+    <datalist id={id}>
+      {suggestions.map((m) => <option key={m} value={m} />)}
+    </datalist>
+  );
+}
 
 export default function Composer() {
   const navigate = useNavigate();
@@ -20,9 +20,14 @@ export default function Composer() {
   const [question, setQuestion] = useState('');
   const [live, setLive] = useState(false);
   const [sameModel, setSameModel] = useState(true);
-  const [flagship, setFlagship] = useState('gpt-4.1');
-  const [standard, setStandard] = useState('gpt-4.1-mini');
-  const [cheap, setCheap] = useState('gpt-4.1-nano');
+  const [provider, setProvider] = useState('');
+  const [model, setModel] = useState('');
+  const [flagshipProvider, setFlagshipProvider] = useState('');
+  const [standardProvider, setStandardProvider] = useState('');
+  const [cheapProvider, setCheapProvider] = useState('');
+  const [flagship, setFlagship] = useState('');
+  const [standard, setStandard] = useState('');
+  const [cheap, setCheap] = useState('');
   const [rounds, setRounds] = useState(4);
   const [maxAgents, setMaxAgents] = useState(12);
   const [groupSize, setGroupSize] = useState(4);
@@ -35,14 +40,42 @@ export default function Composer() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const availableProviders = getAvailableProviders();
+  const hasKeys = availableProviders.length > 0;
+
+  const effProvider = availableProviders.includes(provider) ? provider : (availableProviders[0] || '');
+  const effFlagshipProvider = availableProviders.includes(flagshipProvider) ? flagshipProvider : (availableProviders[0] || '');
+  const effStandardProvider = availableProviders.includes(standardProvider) ? standardProvider : (availableProviders[0] || '');
+  const effCheapProvider = availableProviders.includes(cheapProvider) ? cheapProvider : (availableProviders[0] || '');
+
+  const effModel = model || (PROVIDER_MODELS[effProvider]?.[0] || '');
+  const effFlagship = flagship || (PROVIDER_MODELS[effFlagshipProvider]?.[0] || '');
+  const effStandard = standard || (PROVIDER_MODELS[effStandardProvider]?.[0] || '');
+  const effCheap = cheap || (PROVIDER_MODELS[effCheapProvider]?.[0] || '');
+
   const models = sameModel
-    ? { flagship, standard: flagship, cheap: flagship }
-    : { flagship, standard, cheap };
+    ? { flagship: effModel, standard: effModel, cheap: effModel }
+    : { flagship: effFlagship, standard: effStandard, cheap: effCheap };
   const modelList = Object.values(models);
-  const requiredKeys = live ? getRequiredKeys(modelList) : [];
-  const storedKeys: Record<string, string> = JSON.parse(localStorage.getItem('leanswarm.keys.v1') || '{}');
-  const missingKeys = requiredKeys.filter((k) => !storedKeys[k]);
-  const canRun = !live || missingKeys.length === 0;
+  const canRun = !live || (hasKeys && modelList.every((m) => m.length > 0));
+
+  function handleProviderChange(newProvider: string, setProv: (v: string) => void, setMod: (v: string) => void) {
+    setProv(newProvider);
+    const suggestions = PROVIDER_MODELS[newProvider] || [];
+    setMod(suggestions[0] || '');
+  }
+
+  function handleSameModelChange(checked: boolean) {
+    if (!checked && sameModel) {
+      setFlagshipProvider(effProvider);
+      setStandardProvider(effProvider);
+      setCheapProvider(effProvider);
+      setFlagship(effModel);
+      setStandard(effModel);
+      setCheap(effModel);
+    }
+    setSameModel(checked);
+  }
 
   function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -135,48 +168,77 @@ export default function Composer() {
         <label>Mode</label>
         <div className="segmented">
           <button className={!live ? 'active' : ''} onClick={() => setLive(false)}>Mock (free)</button>
-          <button className={live ? 'active' : ''} onClick={() => setLive(true)}>Live (uses your API keys)</button>
+          <button
+            className={live ? 'active' : ''}
+            onClick={() => hasKeys && setLive(true)}
+            disabled={!hasKeys}
+          >
+            Live (uses your API keys)
+          </button>
         </div>
         {!live && <p className="muted">Deterministic mock engine — no API calls, no keys needed.</p>}
+        {live && !hasKeys && (
+          <p className="muted no-keys-message">No API keys set. Open the API keys panel (sidebar) to add keys for live mode.</p>
+        )}
       </div>
 
-      {live && (
+      {live && hasKeys && (
         <div className="card">
           <label className="row">
-            <input type="checkbox" checked={sameModel} onChange={(e) => setSameModel(e.target.checked)} />
+            <input type="checkbox" checked={sameModel} onChange={(e) => handleSameModelChange(e.target.checked)} />
             Use the same model for all tiers
           </label>
-          <div className="model-grid">
-            <div>
-              <label>Flagship (synthesis)</label>
-              <input list="model-presets" value={flagship} onChange={(e) => setFlagship(e.target.value)} />
-            </div>
-            {!sameModel && (
-              <>
-                <div>
-                  <label>Standard (world bootstrap, memory)</label>
-                  <input list="model-presets" value={standard} onChange={(e) => setStandard(e.target.value)} />
-                </div>
-                <div>
-                  <label>Cheap (agent batches)</label>
-                  <input list="model-presets" value={cheap} onChange={(e) => setCheap(e.target.value)} />
-                </div>
-              </>
-            )}
-          </div>
-          <datalist id="model-presets">
-            {MODEL_PRESETS.map((m) => <option key={m} value={m} />)}
-          </datalist>
 
-          <div className="key-chips">
-            {requiredKeys.length === 0 && <span className="muted">No provider selected yet.</span>}
-            {requiredKeys.map((k) => (
-              <span key={k} className={storedKeys[k] ? 'chip chip-ok' : 'chip chip-missing'}>
-                {storedKeys[k] ? '✓' : '✗'} {k}
-              </span>
-            ))}
-          </div>
-          <button className="btn" onClick={runDoctor} disabled={doctorLoading || requiredKeys.length === 0}>
+          {sameModel ? (
+            <div className="model-grid two-col">
+              <div>
+                <label>Provider</label>
+                <select className="provider-select" value={effProvider} onChange={(e) => handleProviderChange(e.target.value, setProvider, setModel)}>
+                  {availableProviders.map((p) => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label>Model</label>
+                <input list="model-presets-same" value={effModel} onChange={(e) => setModel(e.target.value)} placeholder="model name" />
+                <ModelDatalist id="model-presets-same" provider={effProvider} />
+              </div>
+            </div>
+          ) : (
+            <div className="tier-grid">
+              <div className="tier-block">
+                <div className="tier-label">Flagship (synthesis)</div>
+                <label>Provider</label>
+                <select className="provider-select" value={effFlagshipProvider} onChange={(e) => handleProviderChange(e.target.value, setFlagshipProvider, setFlagship)}>
+                  {availableProviders.map((p) => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
+                </select>
+                <label>Model</label>
+                <input list="model-presets-flagship" value={effFlagship} onChange={(e) => setFlagship(e.target.value)} placeholder="model name" />
+                <ModelDatalist id="model-presets-flagship" provider={effFlagshipProvider} />
+              </div>
+              <div className="tier-block">
+                <div className="tier-label">Standard (world bootstrap, memory)</div>
+                <label>Provider</label>
+                <select className="provider-select" value={effStandardProvider} onChange={(e) => handleProviderChange(e.target.value, setStandardProvider, setStandard)}>
+                  {availableProviders.map((p) => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
+                </select>
+                <label>Model</label>
+                <input list="model-presets-standard" value={effStandard} onChange={(e) => setStandard(e.target.value)} placeholder="model name" />
+                <ModelDatalist id="model-presets-standard" provider={effStandardProvider} />
+              </div>
+              <div className="tier-block">
+                <div className="tier-label">Cheap (agent batches)</div>
+                <label>Provider</label>
+                <select className="provider-select" value={effCheapProvider} onChange={(e) => handleProviderChange(e.target.value, setCheapProvider, setCheap)}>
+                  {availableProviders.map((p) => <option key={p} value={p}>{PROVIDER_LABELS[p] || p}</option>)}
+                </select>
+                <label>Model</label>
+                <input list="model-presets-cheap" value={effCheap} onChange={(e) => setCheap(e.target.value)} placeholder="model name" />
+                <ModelDatalist id="model-presets-cheap" provider={effCheapProvider} />
+              </div>
+            </div>
+          )}
+
+          <button className="btn" onClick={runDoctor} disabled={doctorLoading}>
             {doctorLoading ? 'Checking…' : 'Run doctor check'}
           </button>
           {doctorResult && (
@@ -216,7 +278,7 @@ export default function Composer() {
       <button className="btn btn-accent w-full btn-run" disabled={!canRun || starting} onClick={handleRun}>
         {starting ? 'Starting…' : 'Run simulation'}
       </button>
-      {!canRun && <p className="muted">Add the missing API key(s) above before running live.</p>}
+      {!canRun && live && <p className="muted">Add API keys and select a model before running live.</p>}
     </div>
   );
 }
