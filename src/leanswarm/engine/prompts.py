@@ -19,6 +19,33 @@ Return exactly this JSON schema:
 
 Ground everything in the provided seed excerpt. Topics should be 3-5 short strings. Entities should be 3-5 short strings. Sentiment must be one of the literal strings positive, negative, mixed, or neutral. Pressure points should be 2-3 short strings."""
 
+    elif task_type == TaskType.WORLD_EXTRACTION:
+        return f"""You are an information-extraction engine building a knowledge graph from a source document.
+{common_rules}
+
+Return exactly this JSON schema:
+{{
+  "summary": "1-2 sentences summarizing what the document is about, grounded in its actual content",
+  "sentiment": {{"label": "positive|negative|mixed|neutral", "score": 0.0, "confidence": 0.0}},
+  "topics": [
+    {{"label": "Short Topic Name", "keywords": ["kw1", "kw2"], "salience": 0.0}}
+  ],
+  "entities": [
+    {{"label": "Entity Name", "entity_type": "person|organization|location|policy|event|concept|media|group", "salience": 0.0, "evidence": "short quote from the document"}}
+  ],
+  "relations": [
+    {{"source": "Entity Name", "target": "Other Entity Or Topic", "relation": "supports|opposes|influences|part_of|reports_on|causes|targets|relates_to", "strength": 0.0, "evidence": "short quote"}}
+  ]
+}}
+
+Rules:
+- Extract 3-6 topics, 5-12 entities, and 5-16 relations. Never invent facts not in the document.
+- Labels are 1-4 words, title case, specific ("Older Voters", not "Voters Mentioned In Memo").
+- `sentiment.score` is -1.0 (very negative) to 1.0 (very positive) and must reflect the OVERALL document tone, weighing skeptical or negative framing, not just positive keyword presence.
+- Every relation's `source` and `target` MUST be copied verbatim from an entity or topic `label` you emitted above.
+- `salience` and `strength` are floats in [0.0, 1.0]. `evidence` quotes are at most 120 characters.
+- Prefer meaningful relations (supports/opposes/influences/causes) over relates_to."""
+
     elif task_type == TaskType.AGENT_BATCH:
         return f"""You are an agent simulation engine processing a batch of agents.
 {common_rules}

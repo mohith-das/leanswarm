@@ -14,6 +14,7 @@ class ModelTier(StrEnum):
 
 class TaskType(StrEnum):
     WORLD_BOOTSTRAP = "world_bootstrap"
+    WORLD_EXTRACTION = "world_extraction"
     AGENT_BATCH = "agent_batch"
     MEMORY_SUMMARY = "memory_summary"
     PREDICTION_SYNTHESIS = "prediction_synthesis"
@@ -145,6 +146,14 @@ class WorldEdgeKind(StrEnum):
     CO_OCCURS_WITH = "co_occurs_with"
     FRAMES = "frames"
     CONTRASTS_WITH = "contrasts_with"
+    SUPPORTS = "supports"
+    OPPOSES = "opposes"
+    INFLUENCES = "influences"
+    PART_OF = "part_of"
+    REPORTS_ON = "reports_on"
+    CAUSES = "causes"
+    TARGETS = "targets"
+    RELATES_TO = "relates_to"
 
 
 class SeedDocumentProfile(BaseModel):
@@ -208,6 +217,7 @@ class WorldProfile(BaseModel):
     uncertainty: float = Field(default=0.5, ge=0.0, le=1.0)
     salience: float = Field(default=0.5, ge=0.0, le=1.0)
     complexity: float = Field(default=0.5, ge=0.0, le=1.0)
+    extraction_source: str = "deterministic"
 
 
 class WorldNode(BaseModel):
@@ -321,6 +331,181 @@ class PredictionSynthesisResponse(BaseModel):
             return max(0.0, min(1.0, val))
         except (ValueError, TypeError):
             return 0.5
+
+
+_ALLOWED_ENTITY_TYPES = {
+    "person", "organization", "location", "policy", "event", "concept", "media", "group",
+}
+_ALLOWED_RELATIONS = {
+    "supports", "opposes", "influences", "part_of", "reports_on", "causes",
+    "targets", "relates_to",
+}
+
+
+def _clamp01(v: Any, default: float = 0.5) -> float:
+    try:
+        return max(0.0, min(1.0, float(v)))
+    except (TypeError, ValueError):
+        return default
+
+
+class ExtractedEntity(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    label: str
+    entity_type: str = "concept"
+    salience: float = 0.5
+    evidence: str = ""
+
+    @field_validator("entity_type", mode="before")
+    @classmethod
+    def normalize_entity_type(cls, v: Any) -> str:
+        value = str(v or "").strip().lower()
+        return value if value in _ALLOWED_ENTITY_TYPES else "concept"
+
+    @field_validator("salience", mode="before")
+    @classmethod
+    def clamp_salience(cls, v: Any) -> float:
+        return _clamp01(v)
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def coerce_evidence(cls, v: Any) -> str:
+        if isinstance(v, list):
+            v = v[0] if v else ""
+        return str(v or "")[:200]
+
+
+class ExtractedRelation(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    source: str
+    target: str
+    relation: str = "relates_to"
+    strength: float = 0.5
+    evidence: str = ""
+
+    @field_validator("relation", mode="before")
+    @classmethod
+    def normalize_relation(cls, v: Any) -> str:
+        value = str(v or "").strip().lower()
+        return value if value in _ALLOWED_RELATIONS else "relates_to"
+
+    @field_validator("strength", mode="before")
+    @classmethod
+    def clamp_strength(cls, v: Any) -> float:
+        return _clamp01(v)
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def coerce_evidence(cls, v: Any) -> str:
+        if isinstance(v, list):
+            v = v[0] if v else ""
+        return str(v or "")[:200]
+
+
+class ExtractedTopic(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    label: str
+    keywords: list[str] = Field(default_factory=list)
+    salience: float = 0.5
+
+    @field_validator("keywords", mode="before")
+    @classmethod
+    def coerce_keywords(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            return [v]
+        if isinstance(v, list):
+            return [str(item) for item in v if item][:5]
+        return []
+
+    @field_validator("salience", mode="before")
+    @classmethod
+    def clamp_salience(cls, v: Any) -> float:
+        return _clamp01(v)
+
+
+class ExtractionSentiment(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    label: SentimentLabel = SentimentLabel.NEUTRAL
+    score: float = 0.0
+    confidence: float = 0.0
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def coerce_label(cls, v: Any) -> SentimentLabel:
+        try:
+            return SentimentLabel(str(v).strip().lower())
+        except ValueError:
+            return SentimentLabel.NEUTRAL
+
+    @field_validator("score", mode="before")
+    @classmethod
+    def clamp_score(cls, v: Any) -> float:
+        try:
+            return max(-1.0, min(1.0, float(v)))
+        except (TypeError, ValueError):
+            return 0.0
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def clamp_confidence(cls, v: Any) -> float:
+        return _clamp01(v, default=0.0)
+
+
+def _coerce_item_list(v: Any, model: type[BaseModel]) -> list[Any]:
+    """Coerce a raw list into validated models, dropping invalid items."""
+    if not isinstance(v, list):
+        return []
+    out: list[Any] = []
+    for item in v:
+        if isinstance(item, str):
+            item = {"label": item}
+        if not isinstance(item, dict):
+            continue
+        try:
+            out.append(model.model_validate(item))
+        except Exception:
+            continue
+    return out
+
+
+class WorldExtractionResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    summary: str = ""
+    sentiment: ExtractionSentiment = Field(default_factory=ExtractionSentiment)
+    topics: list[ExtractedTopic] = Field(default_factory=list)
+    entities: list[ExtractedEntity] = Field(default_factory=list)
+    relations: list[ExtractedRelation] = Field(default_factory=list)
+
+    @field_validator("sentiment", mode="before")
+    @classmethod
+    def coerce_sentiment(cls, v: Any) -> Any:
+        return v if isinstance(v, dict) else {}
+
+    @field_validator("topics", mode="before")
+    @classmethod
+    def coerce_topics(cls, v: Any) -> list[Any]:
+        return _coerce_item_list(v, ExtractedTopic)
+
+    @field_validator("entities", mode="before")
+    @classmethod
+    def coerce_entities(cls, v: Any) -> list[Any]:
+        return _coerce_item_list(v, ExtractedEntity)
+
+    @field_validator("relations", mode="before")
+    @classmethod
+    def coerce_relations(cls, v: Any) -> list[Any]:
+        rels = []
+        if isinstance(v, list):
+            for item in v:
+                if not isinstance(item, dict):
+                    continue
+                if not item.get("source") or not item.get("target"):
+                    continue
+                try:
+                    rels.append(ExtractedRelation.model_validate(item))
+                except Exception:
+                    continue
+        return rels
 
 
 WorldSnapshot.model_rebuild()

@@ -20,6 +20,7 @@ from leanswarm.engine.models import (
     PredictionSynthesisResponse,
     TaskType,
     WorldBootstrapResponse,
+    WorldExtractionResponse,
 )
 from leanswarm.engine.prompts import system_prompt
 
@@ -71,6 +72,7 @@ def extract_json_object(text: str) -> dict[str, Any] | None:
 
 _RESPONSE_MODELS: dict[TaskType, type[BaseModel]] = {
     TaskType.WORLD_BOOTSTRAP: WorldBootstrapResponse,
+    TaskType.WORLD_EXTRACTION: WorldExtractionResponse,
     TaskType.AGENT_BATCH: AgentBatchResponse,
     TaskType.MEMORY_SUMMARY: MemorySummaryResponse,
     TaskType.PREDICTION_SYNTHESIS: PredictionSynthesisResponse,
@@ -312,7 +314,7 @@ class LiteLLMRouter:
     def _tier_for_task(self, task_type: TaskType) -> ModelTier:
         if task_type is TaskType.PREDICTION_SYNTHESIS:
             return ModelTier.FLAGSHIP
-        if task_type is TaskType.AGENT_BATCH:
+        if task_type in (TaskType.AGENT_BATCH, TaskType.WORLD_EXTRACTION):
             return ModelTier.CHEAP
         return ModelTier.STANDARD
 
@@ -388,6 +390,15 @@ class LiteLLMRouter:
         )
         question_terms = self._extract_terms(question, limit=5)
         seed_terms = self._extract_terms(seed_text, limit=8)
+
+        if task_type is TaskType.WORLD_EXTRACTION:
+            return {
+                "summary": "",
+                "sentiment": {"label": "neutral", "score": 0.0, "confidence": 0.0},
+                "topics": [],
+                "entities": [],
+                "relations": [],
+            }
 
         if task_type is TaskType.WORLD_BOOTSTRAP:
             return self._mock_world_bootstrap(

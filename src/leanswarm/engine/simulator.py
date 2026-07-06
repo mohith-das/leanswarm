@@ -11,6 +11,7 @@ from typing import Any
 import networkx as nx
 
 from leanswarm.engine.config import RuntimeSettings
+from leanswarm.engine.enrichment import EXTRACTION_MAX_CHARS, apply_extraction
 from leanswarm.engine.llm import LiteLLMRouter
 from leanswarm.engine.logging import JsonlLogger
 from leanswarm.engine.memory import HierarchicalMemoryManager
@@ -75,6 +76,19 @@ class LeanSwarmEngine:
         self.graph = nx.Graph()
         self.memory.reset_scope()
         seed_world = build_seed_world(request.seed_document, question=request.question)
+
+        if request.use_llm and not self.settings.dry_run:
+            await _emit({"type": "phase", "phase": "bootstrap", "status": "running"})
+            extraction = await self.router.route(
+                TaskType.WORLD_EXTRACTION,
+                {
+                    "question": request.question,
+                    "seed_document": seed_world.ingestion.source_text[:EXTRACTION_MAX_CHARS],
+                    "use_llm": request.use_llm,
+                },
+            )
+            seed_world = apply_extraction(seed_world, extraction)
+
         population = build_population(
             seed_world.ingestion.source_text,
             request.question,
