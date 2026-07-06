@@ -5,7 +5,7 @@ import pytest
 
 from leanswarm.engine.config import RuntimeSettings
 from leanswarm.engine.llm import LiteLLMRouter, LiveCredentialsError, extract_json_object
-from leanswarm.engine.models import AgentAction, TaskType, SimulationRequest
+from leanswarm.engine.models import AgentAction, SimulationRequest, TaskType
 from leanswarm.engine.simulator import LeanSwarmEngine
 
 

@@ -1,5 +1,7 @@
 import pytest
+
 from leanswarm.engine.pricing import cost_usd, estimate_run, price_for
+
 
 def test_price_for():
     assert price_for("gpt-4.1") == (2.00, 8.00)

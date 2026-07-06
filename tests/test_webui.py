@@ -1,11 +1,10 @@
-import asyncio
 import json
-import sqlite3
-import time
+
 import pytest
 from fastapi.testclient import TestClient
 
 from leanswarm.webui.app import create_webui_app
+
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
