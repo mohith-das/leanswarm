@@ -217,10 +217,12 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
       </div>
 
       <div className="card">
+        {result.world?.profile?.extraction_source === 'llm' && (
+          <span className="extraction-badge">LLM-extracted world</span>
+        )}
         <div className="segmented">
           <button className={graphView === 'agents' ? 'active' : ''} onClick={() => setGraphView('agents')}>Agent network</button>
           <button className={graphView === 'knowledge' ? 'active' : ''} onClick={() => setGraphView('knowledge')}>Knowledge graph</button>
-          {result.world?.profile?.extraction_source === 'llm' && <span className="muted" style={{ marginLeft: 'auto', fontSize: 12 }}>LLM-extracted world</span>}
         </div>
         {graphView === 'agents' ? (
           <ForceGraph nodes={agentNodes} edges={agentEdges} />

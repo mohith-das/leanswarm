@@ -80,6 +80,10 @@ body {
   margin-bottom: 2rem;
 }
 
+.logo-link {
+  text-decoration: none;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -256,11 +260,17 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
 
 .advanced-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .advanced-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .cost-estimate {
@@ -622,4 +632,77 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
 
 .theme-toggle {
   width: 100%;
+}
+
+/* Provider-first model selection */
+.segmented button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.no-keys-message {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.provider-select {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+  cursor: pointer;
+}
+
+.model-grid.two-col {
+  grid-template-columns: 1fr 2fr;
+  align-items: end;
+}
+
+.tier-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.tier-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--bg);
+}
+
+.tier-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: var(--accent);
+}
+
+.tier-block label {
+  font-size: 0.85rem;
+  margin-bottom: 0.25rem;
+  color: var(--muted);
+}
+
+.tier-block .provider-select,
+.tier-block input {
+  margin-bottom: 0.75rem;
+}
+
+.extraction-badge {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--accent);
+  border: 1px solid rgba(15, 118, 110, 0.2);
+  margin-bottom: 0.75rem;
 }
