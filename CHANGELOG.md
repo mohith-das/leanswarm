@@ -6,6 +6,46 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-06
+
+### Added
+- **Retrieval**: simulations can now be grounded in fetched web sources. The CLI
+  `simulate` subcommand gains `--url`, `--search`, and `--max-sources` flags; the
+  Web UI Composer adds a Sources card with URL inputs and a Tavily/Brave-powered
+  "search the web" option. All network access goes through an SSRF guard that
+  refuses private/reserved addresses. Retrieved sources are assembled into the
+  seed corpus with `build_corpus()`.
+- **Persona depth**: live mode now generates detailed agent personas (display
+  names, bios, and stances grounded in the extracted world) with a single
+  cheap-tier `PERSONA_BATCH` call. Personas and stances appear in agent cards
+  and feed into action prompts for more consistent agent behavior.
+- **Post-run chat**: talk to any simulated agent or the Report Agent after a run
+  completes. Chat works in both mock mode (deterministic canned replies) and
+  live mode (real LLM responses with per-message model selection). Available
+  in the run result view and gallery detail.
+- **Sectioned reports**: an on-demand `FULL_REPORT` call on the flagship tier
+  generates a structured multi-section report (Executive Summary, World &
+  Actors, Simulation Dynamics, Prediction & Confidence, Risks) with a
+  downloadable Markdown file.
+- **Calibration benchmarking**: `leanswarm bench --calibration <path>` runs
+  a Brier score evaluation against resolved binary outcomes (0/1 JSONL), with
+  an optional single-shot baseline arm, producing per-case probability
+  comparisons and a verdict (sim_better / baseline_better / tie).
+- **PDF upload**: the Composer's file loader now accepts PDF files. Text
+  extraction uses `pdfjs-dist` loaded dynamically — it ships as a separate
+  lazy chunk in the frontend build.
+- **Re-run from gallery**: any saved or published run now has an "Open in
+  composer" button that prefills seed and question for easy re-execution.
+
+### Changed
+- World extraction window widened from 6k to 12k characters to accommodate the
+  larger seed corpus from retrieved sources.
+- AGENT_BATCH payload now includes persona and stance fields (empty strings in
+  dry-run mode — no output change).
+- `PredictionReport` now carries a `direction` field.
+- Cost estimates account for the persona-batch call.
+- `httpx>=0.27` is now an explicit runtime dependency.
+
 ## [0.3.2] - 2026-07-06
 
 ### Changed
