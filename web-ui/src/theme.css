@@ -260,11 +260,17 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
 
 .advanced-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 1rem;
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+@media (max-width: 600px) {
+  .advanced-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .cost-estimate {
