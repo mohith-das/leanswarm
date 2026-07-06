@@ -6,11 +6,23 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-07-06
+
 ### Added
 - Live mode now runs a single cheap-tier LLM extraction pass over the seed document,
   replacing n-gram topics/entities with typed entities and relations in the world
   profile, agent memory, prompts, and knowledge graph; falls back to the
   deterministic profile if extraction fails. Cost estimates account for the extra call.
+
+### Fixed
+- The web UI's per-run/browser-provided API credentials were being ignored by the
+  live-mode readiness check, which only consulted real environment variables and
+  litellm's environment validation. This made bring-your-own-key live runs fail
+  with `LiveCredentialsError` even when a valid key was supplied in the UI. 0.3.0
+  is affected; upgrade if you deployed the web UI for live-mode use.
+- `GET /api/runs/{id}` no longer leaks other users' private saved runs to anyone
+  who knows the run id.
+- Full mypy strict-mode compliance restored across `webui/*.py`.
 
 ## [0.3.0] - 2026-07-05
 
