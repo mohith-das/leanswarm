@@ -97,10 +97,21 @@ class RunManager:
             owner_user_id=user_id,
         )
         self.jobs[run_id] = job
-        asyncio.create_task(self._execute(job, engine, sim_request))
+        asyncio.create_task(
+            self._execute(job, engine, sim_request, req.source_urls, req.use_search, req.max_sources, req.credentials)
+        )
         return run_id
 
-    async def _execute(self, job: RunJob, engine: LeanSwarmEngine, sim_request: SimulationRequest) -> None:
+    async def _execute(
+        self,
+        job: RunJob,
+        engine: LeanSwarmEngine,
+        sim_request: SimulationRequest,
+        source_urls: list[str],
+        use_search: bool,
+        max_sources: int,
+        credentials: dict[str, str],
+    ) -> None:
         async with self.semaphore:
             async def push(event: dict[str, Any]) -> None:
                 if event.get("type") == "tick":
@@ -110,7 +121,34 @@ class RunManager:
                     job.cond.notify_all()
 
             await push({"type": "status", "status": "running"})
-            
+
+            if source_urls or use_search:
+                from leanswarm.engine.retrieval import build_corpus, gather_sources
+
+                await push({"type": "phase", "phase": "sources", "status": "running"})
+                sources, errors = await gather_sources(
+                    job.request_sanitized.get("question", ""),
+                    source_urls,
+                    credentials,
+                    use_search,
+                    max_sources,
+                )
+                await push({
+                    "type": "phase",
+                    "phase": "sources",
+                    "status": "done",
+                    "count": len(sources),
+                    "errors": errors,
+                })
+                sim_request = sim_request.model_copy(
+                    update={
+                        "seed_document": build_corpus(
+                            sim_request.seed_document, sources
+                        ),
+                        "retrieved_sources": sources,
+                    }
+                )
+
             try:
                 result = await engine.simulate(sim_request, on_progress=push)
                 c_usd = run_cost(engine.router)

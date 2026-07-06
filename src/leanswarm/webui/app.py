@@ -15,6 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from leanswarm.engine.config import RuntimeSettings
 from leanswarm.engine.llm import LiteLLMRouter
+from leanswarm.engine.models import TaskType
 from leanswarm.engine.pricing import estimate_run
 from leanswarm.webui.auth import get_current_user, hash_password, require_user, verify_password
 from leanswarm.webui.config import WebUISettings
@@ -22,6 +23,7 @@ from leanswarm.webui.db import connect, init_db
 from leanswarm.webui.runs import RunManager
 from leanswarm.webui.schemas import (
     AuthRequest,
+    ChatRequest,
     DoctorRequest,
     EstimateRequest,
     PublishRequest,
@@ -136,6 +138,11 @@ def create_webui_app() -> FastAPI:
             raise HTTPException(422, f"max_agents exceeds max {settings.max_agents}")
         if len(req.seed_document) > settings.max_seed_chars:
             raise HTTPException(422, f"seed_document exceeds {settings.max_seed_chars} chars")
+        if len(req.source_urls) > 6:
+            raise HTTPException(422, "max 6 source URLs")
+        for url in req.source_urls:
+            if len(url) > 2000:
+                raise HTTPException(422, "each source URL must be ≤ 2000 chars")
             
         run_id = await run_manager.start(req, user["id"] if user else None)
         return {"id": run_id}
@@ -399,6 +406,156 @@ def create_webui_app() -> FastAPI:
             "result": json.loads(row["result_json"]),
             "is_public": True,
             "created_at": row["created_at"]
+        }
+
+    @app.post("/api/runs/{id}/chat")
+    async def chat(id: str, req: ChatRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
+        from leanswarm.engine.llm import LiveCredentialsError
+        from leanswarm.webui.chat import run_chat
+
+        # Rate limit
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        if settings.chats_per_hour_per_ip > 0:
+            history = (ip_history.get("chat") or ip_history.setdefault("chat", {}))  # type: ignore[assignment]
+            if isinstance(history, dict):
+                q = history.setdefault(ip, deque())
+            else:
+                q = ip_history.setdefault(ip, deque())
+            if not isinstance(q, deque):
+                q = deque()
+            while q and q[0] < now - 3600:
+                q.popleft()
+            if len(q) >= settings.chats_per_hour_per_ip:
+                raise HTTPException(429, "Chat rate limit exceeded")
+            q.append(now)
+
+        # Resolve the run result
+        job = run_manager.jobs.get(id)
+        result: dict[str, Any] | None = None
+        if job:
+            if job.owner_user_id is not None and (user is None or job.owner_user_id != user["id"]):
+                raise HTTPException(404, "Run not found")
+            result = job.result
+        else:
+            c: sqlite3.Connection = request.app.state.db
+            row = c.execute("SELECT * FROM runs WHERE id = ?", (id,)).fetchone()
+            if not row:
+                raise HTTPException(404, "Run not found")
+            if not row["is_public"] and (user is None or row["user_id"] != user["id"]):
+                raise HTTPException(404, "Run not found")
+            result = json.loads(row["result_json"])
+        if result is None:
+            raise HTTPException(404, "Run not complete")
+
+        # Build a per-request router
+        eng_settings = RuntimeSettings.from_env()
+        eng_settings.dry_run = not req.live
+        if req.models is not None:
+            eng_settings.flagship_model = req.models.flagship
+            eng_settings.standard_model = req.models.standard
+            eng_settings.cheap_model = req.models.cheap
+        eng_settings.credentials = req.credentials.copy()
+        if req.api_base:
+            eng_settings.api_base = req.api_base
+        if req.api_key:
+            eng_settings.api_key = req.api_key
+        eng_settings.log_dir = settings.data_dir / "chat-logs"
+        router = LiteLLMRouter(eng_settings)
+        try:
+            return await run_chat(router, result, req.agent_id, req.message, req.history, req.live)
+        except KeyError as exc:
+            raise HTTPException(404, "Agent not found in this run") from exc
+        except LiveCredentialsError as exc:
+            raise HTTPException(422, str(exc)) from None
+
+    @app.post("/api/runs/{id}/report")
+    async def generate_report(id: str, req: ChatRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
+        from leanswarm.engine.llm import LiveCredentialsError
+
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        if settings.chats_per_hour_per_ip > 0:
+            history = ip_history.get("chat", {})
+            if not isinstance(history, dict):
+                history = {}
+            q = history.setdefault(ip, deque())
+            while q and q[0] < now - 3600:
+                q.popleft()
+            if len(q) >= settings.chats_per_hour_per_ip:
+                raise HTTPException(429, "Report rate limit exceeded")
+            q.append(now)
+
+        job = run_manager.jobs.get(id)
+        result: dict[str, Any] | None = None
+        if job:
+            if job.owner_user_id is not None and (user is None or job.owner_user_id != user["id"]):
+                raise HTTPException(404, "Run not found")
+            result = job.result
+        else:
+            c: sqlite3.Connection = request.app.state.db
+            row = c.execute("SELECT * FROM runs WHERE id = ?", (id,)).fetchone()
+            if not row:
+                raise HTTPException(404, "Run not found")
+            if not row["is_public"] and (user is None or row["user_id"] != user["id"]):
+                raise HTTPException(404, "Run not found")
+            result = json.loads(row["result_json"])
+        if result is None:
+            raise HTTPException(404, "Run not complete")
+
+        report = result.get("report", {})
+        ticks = result.get("ticks", [])
+        world = result.get("world", {})
+        profile = world.get("profile", {})
+
+        eng_settings = RuntimeSettings.from_env()
+        eng_settings.dry_run = not req.live
+        if req.models is not None:
+            eng_settings.flagship_model = req.models.flagship
+            eng_settings.standard_model = req.models.standard
+            eng_settings.cheap_model = req.models.cheap
+        eng_settings.credentials = req.credentials.copy()
+        if req.api_base:
+            eng_settings.api_base = req.api_base
+        if req.api_key:
+            eng_settings.api_key = req.api_key
+        eng_settings.log_dir = settings.data_dir / "chat-logs"
+        router = LiteLLMRouter(eng_settings)
+
+        before_p = router.prompt_tokens_total
+        before_c = router.completion_tokens_total
+        try:
+            response = await router.route(
+                TaskType.FULL_REPORT,
+                {
+                    "use_llm": req.live,
+                    "question": report.get("question", ""),
+                    "prediction": report.get("prediction", ""),
+                    "confidence": report.get("confidence", 0.5),
+                    "rationale": report.get("rationale", []),
+                    "key_events": report.get("key_events", []),
+                    "tick_count": report.get("tick_count", 0),
+                    "tick_events": [
+                        event
+                        for tick in ticks
+                        for event in tick.get("events", [])[:4]
+                    ],
+                    "world_summary": profile.get("summary", ""),
+                    "world_topics": [t.get("label", "") for t in (profile.get("topics", []) or [])[:6]],
+                    "world_entities": [e.get("label", "") for e in (profile.get("entities", []) or [])[:8]],
+                    "agent_names": [
+                        (a.get("name", "") + (": " + a.get("stance", "")) if a.get("stance") else a.get("name", ""))
+                        for a in world.get("agents", [])[:16]
+                    ],
+                },
+            )
+        except LiveCredentialsError as exc:
+            raise HTTPException(422, str(exc)) from None
+        return {
+            "title": str(response.get("title", "")),
+            "sections": response.get("sections", []),
+            "prompt_tokens": router.prompt_tokens_total - before_p,
+            "completion_tokens": router.completion_tokens_total - before_c,
         }
 
     @app.get("/healthz")

@@ -36,6 +36,9 @@ export interface StartRunRequest {
   api_base?: string | null;
   api_key?: string | null;
   title?: string | null;
+  source_urls: string[];
+  use_search: boolean;
+  max_sources: number;
 }
 
 export interface EstimateRequest {
@@ -70,4 +73,6 @@ export const api = {
   login: (email: string, password: string) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   me: () => request('/api/auth/me'),
+  chat: (id: string, body: Record<string, unknown>) => request(`/api/runs/${id}/chat`, { method: 'POST', body: JSON.stringify(body) }),
+  report: (id: string, body: Record<string, unknown>) => request(`/api/runs/${id}/report`, { method: 'POST', body: JSON.stringify(body) }),
 };

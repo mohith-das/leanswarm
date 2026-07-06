@@ -22,6 +22,7 @@ class WebUISettings(BaseModel):
     max_concurrent_runs: int = 2
     runs_per_hour_per_ip: int = 10
     retention_seconds: int = 7200
+    chats_per_hour_per_ip: int = 120
 
     @classmethod
     def from_env(cls) -> WebUISettings:
@@ -36,6 +37,7 @@ class WebUISettings(BaseModel):
             max_concurrent_runs=int(os.getenv("LEANSWARM_UI_MAX_CONCURRENT_RUNS", "2")),
             runs_per_hour_per_ip=int(os.getenv("LEANSWARM_UI_RUNS_PER_HOUR_PER_IP", "10")),
             retention_seconds=int(os.getenv("LEANSWARM_UI_RETENTION_SECONDS", "7200")),
+            chats_per_hour_per_ip=int(os.getenv("LEANSWARM_UI_CHATS_PER_HOUR_PER_IP", "120")),
         )
 
     def ensure_dirs(self) -> None:

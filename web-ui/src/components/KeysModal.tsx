@@ -60,6 +60,15 @@ export default function KeysModal({ onClose }: { onClose: () => void }) {
           <label>Custom API key</label>
           <input type="password" value={values.LEANSWARM_API_KEY || ''} onChange={(e) => setValue('LEANSWARM_API_KEY', e.target.value)} placeholder="any OpenAI-compatible endpoint" />
         </div>
+        <div className="modal-section-heading">Search (for source gathering)</div>
+        <div className="key-row">
+          <label>Tavily Search</label>
+          <input type="password" value={values.TAVILY_API_KEY || ''} onChange={(e) => setValue('TAVILY_API_KEY', e.target.value)} placeholder="TAVILY_API_KEY" />
+        </div>
+        <div className="key-row">
+          <label>Brave Search</label>
+          <input type="password" value={values.BRAVE_API_KEY || ''} onChange={(e) => setValue('BRAVE_API_KEY', e.target.value)} placeholder="BRAVE_API_KEY" />
+        </div>
         <div className="modal-actions">
           <button className="btn" onClick={clearAll}>Clear all</button>
           <button className="btn btn-accent" onClick={onClose}>Done</button>

@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -11,7 +12,7 @@ import uvicorn
 
 from leanswarm.api.app import create_app
 from leanswarm.engine.config import RuntimeSettings
-from leanswarm.engine.models import ActivationMode, SimulationRequest
+from leanswarm.engine.models import ActivationMode, RetrievedSource, SimulationRequest
 from leanswarm.engine.simulator import LeanSwarmEngine
 from leanswarm.tools.benchmark import run_benchmark
 from leanswarm.webui.app import create_webui_app
@@ -76,6 +77,17 @@ def build_parser() -> argparse.ArgumentParser:
         dest="use_llm",
         help="Disable live LLM calls and force mock execution",
     )
+    simulate_parser.add_argument(
+        "--url", action="append", dest="urls", default=None,
+        help="Fetch this URL as an additional source (repeatable, max 6)",
+    )
+    simulate_parser.add_argument(
+        "--search", action="store_true",
+        help="Search the web for the question (needs TAVILY_API_KEY or BRAVE_API_KEY)",
+    )
+    simulate_parser.add_argument(
+        "--max-sources", type=int, default=4, help="Maximum sources to gather (1-6)"
+    )
     simulate_parser.set_defaults(handler=handle_simulate)
 
     api_parser = subparsers.add_parser("api", help="Run the FastAPI server")
@@ -88,6 +100,13 @@ def build_parser() -> argparse.ArgumentParser:
     doctor_parser.set_defaults(handler=handle_doctor)
 
     bench_parser = subparsers.add_parser("bench", help="Run the benchmark harness")
+    bench_parser.add_argument("--calibration", dest="calibration_path", default=None, help="Path to a JSONL calibration file")
+    bench_parser.add_argument("--rounds", type=int, default=3, help="Tick rounds per calibration case")
+    bench_parser.add_argument("--max-agents", type=int, default=12, help="Max agents per calibration case")
+    bench_parser.add_argument("--no-baseline", action="store_true", help="Skip the single-shot baseline arm")
+    bench_mode_group = bench_parser.add_mutually_exclusive_group()
+    bench_mode_group.add_argument("--live", action="store_true", help="Enable live LLM mode")
+    bench_mode_group.add_argument("--dry-run", action="store_true", help="Force dry-run mode")
     bench_parser.set_defaults(handler=handle_bench)
 
     ui_parser = subparsers.add_parser("ui", help="Run the Web UI server")
@@ -128,8 +147,26 @@ def handle_smoke(args: argparse.Namespace) -> int:
 def handle_simulate(args: argparse.Namespace) -> int:
     settings = _get_settings(args)
     seed_path = Path(args.seed)
+    seed_document = seed_path.read_text(encoding="utf-8")
+    retrieved: list[RetrievedSource] = []
+    urls = args.urls or []
+    if urls or args.search:
+        from leanswarm.engine.retrieval import build_corpus, gather_sources
+
+        credentials = {
+            k: v
+            for k in ("TAVILY_API_KEY", "BRAVE_API_KEY")
+            if (v := os.getenv(k))
+        }
+        retrieved, errors = asyncio.run(
+            gather_sources(args.question, urls, credentials, args.search, args.max_sources)
+        )
+        for line in errors:
+            print(f"leanswarm: source skipped: {line}", file=sys.stderr)
+        print(f"leanswarm: gathered {len(retrieved)} source(s)", file=sys.stderr)
+        seed_document = build_corpus(seed_document, retrieved)
     request = SimulationRequest(
-        seed_document=seed_path.read_text(encoding="utf-8"),
+        seed_document=seed_document,
         question=args.question,
         rounds=args.rounds,
         max_agents=args.max_agents,
@@ -139,6 +176,7 @@ def handle_simulate(args: argparse.Namespace) -> int:
         convergence_threshold=args.convergence_threshold,
         random_seed=args.random_seed,
         use_llm=args.use_llm,
+        retrieved_sources=retrieved,
     )
     result = asyncio.run(LeanSwarmEngine(settings=settings).simulate(request))
     print(result.model_dump_json(indent=2))
@@ -204,7 +242,20 @@ def handle_api(args: argparse.Namespace) -> int:
     return 0
 
 
-def handle_bench(_: argparse.Namespace) -> int:
+def handle_bench(args: argparse.Namespace) -> int:
+    if args.calibration_path:
+        from leanswarm.tools.benchmark import run_calibration
+
+        result = asyncio.run(
+            run_calibration(
+                args.calibration_path,
+                rounds=args.rounds,
+                max_agents=args.max_agents,
+                baseline=not args.no_baseline,
+            )
+        )
+        print(json.dumps(result, indent=2))
+        return 0
     result = asyncio.run(run_benchmark())
     print(json.dumps(result, indent=2))
     return 0

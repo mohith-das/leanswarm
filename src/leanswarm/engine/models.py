@@ -15,9 +15,13 @@ class ModelTier(StrEnum):
 class TaskType(StrEnum):
     WORLD_BOOTSTRAP = "world_bootstrap"
     WORLD_EXTRACTION = "world_extraction"
+    PERSONA_BATCH = "persona_batch"
     AGENT_BATCH = "agent_batch"
     MEMORY_SUMMARY = "memory_summary"
     PREDICTION_SYNTHESIS = "prediction_synthesis"
+    AGENT_CHAT = "agent_chat"
+    REPORT_CHAT = "report_chat"
+    FULL_REPORT = "full_report"
 
 
 class ActivationMode(StrEnum):
@@ -40,6 +44,8 @@ class AgentState(BaseModel):
     attention: float = Field(default=0.5, ge=0.0, le=1.0)
     relationships: dict[str, float] = Field(default_factory=dict)
     memory: AgentMemory = Field(default_factory=AgentMemory)
+    persona: str | None = None
+    stance: str | None = None
 
 
 class AgentAction(BaseModel):
@@ -76,6 +82,14 @@ class TickRecord(BaseModel):
     stable: bool = False
 
 
+class RetrievedSource(BaseModel):
+    url: str
+    title: str = ""
+    chars: int = 0
+    via: str = "direct"
+    text: str = Field(default="", exclude=True)
+
+
 class SimulationRequest(BaseModel):
     seed_document: str
     question: str
@@ -87,6 +101,7 @@ class SimulationRequest(BaseModel):
     group_size: int = Field(default=5, ge=1, le=10)
     random_seed: int = 7
     use_llm: bool = True
+    retrieved_sources: list[RetrievedSource] = Field(default_factory=list)
 
 
 class PredictionReport(BaseModel):
@@ -101,6 +116,7 @@ class PredictionReport(BaseModel):
     cache_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0)
     average_active_fraction: float = Field(default=0.0, ge=0.0, le=1.0)
     activation_envelope_hit_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    direction: str = ""
 
 
 class RelationshipEdge(BaseModel):
@@ -506,6 +522,62 @@ class WorldExtractionResponse(BaseModel):
                 except Exception:
                     continue
         return rels
+
+
+class GeneratedPersona(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    agent_id: str
+    display_name: str = ""
+    persona: str = ""
+    stance: str = ""
+
+
+class PersonaBatchResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    personas: list[GeneratedPersona] = Field(default_factory=list)
+
+    @field_validator("personas", mode="before")
+    @classmethod
+    def coerce_personas(cls, v: Any) -> list[Any]:
+        out: list[Any] = []
+        if isinstance(v, list):
+            for item in v:
+                if isinstance(item, dict) and item.get("agent_id"):
+                    try:
+                        out.append(GeneratedPersona.model_validate(item))
+                    except Exception:
+                        continue
+        return out
+
+
+class ChatResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    reply: str = ""
+
+
+class ReportSection(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    heading: str = ""
+    content: str = ""
+
+
+class FullReportResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: str = ""
+    sections: list[ReportSection] = Field(default_factory=list)
+
+    @field_validator("sections", mode="before")
+    @classmethod
+    def coerce_sections(cls, v: Any) -> list[Any]:
+        out: list[Any] = []
+        if isinstance(v, list):
+            for item in v:
+                if isinstance(item, dict) and (item.get("heading") or item.get("content")):
+                    try:
+                        out.append(ReportSection.model_validate(item))
+                    except Exception:
+                        continue
+        return out
 
 
 WorldSnapshot.model_rebuild()

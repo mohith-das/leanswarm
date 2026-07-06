@@ -1,7 +1,7 @@
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { collectCredentials, getOverrides, getAvailableProviders, PROVIDER_MODELS, PROVIDER_LABELS } from '../keys';
+import { collectCredentials, getOverrides, getAvailableProviders, PROVIDER_MODELS, PROVIDER_LABELS, getSearchCredentials } from '../keys';
 import CostEstimate from '../components/CostEstimate';
 
 function ModelDatalist({ id, provider }: { id: string; provider: string }) {
@@ -40,6 +40,26 @@ export default function Composer() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [sourceUrls, setSourceUrls] = useState<string[]>([]);
+  const [useSearch, setUseSearch] = useState(false);
+  const searchCredentials = getSearchCredentials();
+  const hasSearchKeys = Object.values(searchCredentials).some((v) => v);
+  const activeSourceCount = sourceUrls.filter(Boolean).length + (useSearch ? 2 : 0);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem('leanswarm.rerun.v1');
+    if (!raw) return;
+    sessionStorage.removeItem('leanswarm.rerun.v1');
+    try {
+      const r = JSON.parse(raw);
+      if (r.seed_document) setSeedDocument(String(r.seed_document).slice(0, 20000));
+      if (r.question) setQuestion(String(r.question));
+      if (r.rounds) setRounds(Number(r.rounds));
+      if (r.max_agents) setMaxAgents(Number(r.max_agents));
+      if (r.group_size) setGroupSize(Number(r.group_size));
+    } catch { /* ignore */ }
+  }, []);
+
   const availableProviders = getAvailableProviders();
   const hasKeys = availableProviders.length > 0;
 
@@ -77,9 +97,28 @@ export default function Composer() {
     setSameModel(checked);
   }
 
-  function handleFile(e: ChangeEvent<HTMLInputElement>) {
+  async function handleFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.name.toLowerCase().endsWith('.pdf')) {
+      setError(null);
+      try {
+        const pdfjs = await import('pdfjs-dist');
+        const buffer = await file.arrayBuffer();
+        const doc = await pdfjs.getDocument({ data: buffer }).promise;
+        const pages: string[] = [];
+        const pageCount = Math.min(doc.numPages, 30);
+        for (let i = 1; i <= pageCount; i++) {
+          const page = await doc.getPage(i);
+          const content = await page.getTextContent();
+          pages.push(content.items.map((it: any) => ('str' in it ? it.str : '')).join(' '));
+        }
+        setSeedDocument(pages.join('\n\n').slice(0, 20000));
+      } catch {
+        setError('Could not read that PDF — try pasting the text instead.');
+      }
+      return;
+    }
     const reader = new FileReader();
     reader.onload = () => setSeedDocument(String(reader.result || ''));
     reader.readAsText(file);
@@ -121,9 +160,15 @@ export default function Composer() {
         random_seed: randomSeed,
         live,
         models,
-        credentials: live ? collectCredentials(modelList) : {},
+        credentials: {
+          ...(live ? collectCredentials(modelList) : {}),
+          ...getSearchCredentials(),
+        },
         ...(live ? getOverrides() : {}),
         title: title || null,
+        source_urls: sourceUrls.filter(Boolean),
+        use_search: useSearch,
+        max_sources: 4,
       });
       navigate(`/run/${id}`);
     } catch (err: any) {
@@ -154,9 +199,36 @@ export default function Composer() {
           <span className="muted">{seedDocument.length} / 20000 characters</span>
           <label className="btn">
             Load .txt/.md file
-            <input type="file" accept=".txt,.md" onChange={handleFile} style={{ display: 'none' }} />
+            <input type="file" accept=".txt,.md,.pdf" onChange={handleFile} style={{ display: 'none' }} />
           </label>
         </div>
+      </div>
+
+      <div className="card">
+        <label>Sources (optional)</label>
+        {sourceUrls.map((url, i) => (
+          <div key={i} className="row" style={{ marginBottom: '0.5rem' }}>
+            <input
+              className="w-full"
+              value={url}
+              onChange={(e) => {
+                const next = [...sourceUrls];
+                next[i] = e.target.value.slice(0, 2000);
+                setSourceUrls(next);
+              }}
+              placeholder="https://example.com/article"
+            />
+            <button className="btn" onClick={() => setSourceUrls(sourceUrls.filter((_, j) => j !== i))}>✕</button>
+          </div>
+        ))}
+        {sourceUrls.length < 6 && (
+          <button className="btn" onClick={() => setSourceUrls([...sourceUrls, ''])}>+ Add URL</button>
+        )}
+        <label className="row" style={{ marginTop: '0.75rem' }}>
+          <input type="checkbox" checked={useSearch} disabled={!hasSearchKeys} onChange={(e) => setUseSearch(e.target.checked)} />
+          Also search the web for this question
+        </label>
+        {!hasSearchKeys && <p className="muted" style={{ fontSize: '0.8rem' }}>Set TAVILY_API_KEY or BRAVE_API_KEY in the API keys panel to enable search.</p>}
       </div>
 
       <div className="card">
@@ -271,7 +343,7 @@ export default function Composer() {
         )}
       </div>
 
-      <CostEstimate live={live} rounds={rounds} maxAgents={maxAgents} groupSize={groupSize} activeAgentFraction={activeAgentFraction} models={models} seedChars={seedDocument.length} />
+      <CostEstimate live={live} rounds={rounds} maxAgents={maxAgents} groupSize={groupSize} activeAgentFraction={activeAgentFraction} models={models} seedChars={seedDocument.length + 3500 * activeSourceCount} />
 
       {error && <div className="card error-card">{error}</div>}
 

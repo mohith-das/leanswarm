@@ -248,7 +248,8 @@ def test_estimate_run_includes_extraction():
 
     est_zero = estimate_run(seed_chars=0, **base_kwargs)
     est_6k = estimate_run(seed_chars=6000, **base_kwargs)
-    est_60k = estimate_run(seed_chars=60000, **base_kwargs)
+    est_12k = estimate_run(seed_chars=12000, **base_kwargs)
+    est_120k = estimate_run(seed_chars=120000, **base_kwargs)
 
     assert est_6k["calls_min"] == est_zero["calls_min"]
     assert est_6k["calls_max"] == est_zero["calls_max"]
@@ -256,5 +257,5 @@ def test_estimate_run_includes_extraction():
     assert est_6k["prompt_tokens_est"] > est_zero["prompt_tokens_est"]
     assert est_6k["cost_max_usd"] > est_zero["cost_max_usd"]
 
-    assert est_60k["prompt_tokens_est"] == est_6k["prompt_tokens_est"]
-    assert est_60k["cost_max_usd"] == est_6k["cost_max_usd"]
+    assert est_120k["prompt_tokens_est"] == est_12k["prompt_tokens_est"]
+    assert est_120k["cost_max_usd"] == est_12k["cost_max_usd"]

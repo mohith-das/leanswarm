@@ -26,7 +26,7 @@ from leanswarm.engine.models import (
 
 # The extraction call reads at most this many characters of the seed document.
 # Single pass, no chunking — this bound is what keeps the feature ~1 cheap call.
-EXTRACTION_MAX_CHARS = 6000
+EXTRACTION_MAX_CHARS = 12000
 
 _RELATION_EDGE_KINDS: dict[str, WorldEdgeKind] = {
     "supports": WorldEdgeKind.SUPPORTS,

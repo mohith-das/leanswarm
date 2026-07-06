@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json as _json
 import re
 import shutil
 from dataclasses import dataclass
@@ -9,7 +10,13 @@ from time import perf_counter
 from typing import Any
 
 from leanswarm.engine.config import RuntimeSettings
-from leanswarm.engine.models import ActivationMode, ModelTier, SimulationRequest, SimulationResult
+from leanswarm.engine.models import (
+    ActivationMode,
+    ModelTier,
+    SimulationRequest,
+    SimulationResult,
+    TaskType,
+)
 from leanswarm.engine.simulator import LeanSwarmEngine
 
 
@@ -500,3 +507,120 @@ def _polarity_score(text: str) -> int:
 def _fingerprint(*parts: object) -> str:
     payload = "|".join(str(part) for part in parts)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+@dataclass(frozen=True)
+class CalibrationCase:
+    case_id: str
+    question: str
+    seed_document: str
+    outcome: int
+    random_seed: int = 7
+
+
+def load_calibration_cases(path: str) -> list[CalibrationCase]:
+    cases: list[CalibrationCase] = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            obj = _json.loads(line)
+            cases.append(
+                CalibrationCase(
+                    case_id=str(obj["id"]),
+                    question=str(obj["question"]),
+                    seed_document=str(obj["seed_document"]),
+                    outcome=int(obj["outcome"]),
+                    random_seed=int(obj.get("random_seed", 7)),
+                )
+            )
+    return cases
+
+
+def probability_from_report(direction: str, confidence: float) -> float:
+    if direction == "positive":
+        return max(0.0, min(1.0, confidence))
+    if direction == "negative":
+        return max(0.0, min(1.0, 1.0 - confidence))
+    return 0.5
+
+
+def brier_score(pairs: list[tuple[float, int]]) -> float:
+    if not pairs:
+        return 0.0
+    return round(sum((p - o) ** 2 for p, o in pairs) / len(pairs), 4)
+
+
+async def run_calibration(
+    path: str, rounds: int = 3, max_agents: int = 12, baseline: bool = True
+) -> dict[str, object]:
+    cases = load_calibration_cases(path)
+    engine = LeanSwarmEngine()
+    router = engine.router
+    sim_pairs: list[tuple[float, int]] = []
+    baseline_pairs: list[tuple[float, int]] = []
+    per_case: list[dict[str, object]] = []
+
+    for case in cases:
+        result = await engine.simulate(
+            SimulationRequest(
+                seed_document=case.seed_document,
+                question=case.question,
+                rounds=rounds,
+                max_agents=max_agents,
+                random_seed=case.random_seed,
+            )
+        )
+        p_sim = probability_from_report(result.report.direction, result.report.confidence)
+        sim_pairs.append((p_sim, case.outcome))
+
+        p_baseline = 0.5
+        if baseline:
+            synth = await router.route(
+                TaskType.PREDICTION_SYNTHESIS,
+                {
+                    "question": case.question,
+                    "seed_document": case.seed_document[:4000],
+                    "summary": "",
+                    "context": "",
+                    "world_topics": [],
+                    "world_entities": [],
+                    "sentiment": "neutral",
+                    "ticks": [],
+                    "agent_count": 0,
+                    "use_llm": True,
+                    "baseline": True,
+                },
+            )
+            p_baseline = probability_from_report(
+                str(synth.get("direction", "")), float(synth.get("confidence", 0.55))
+            )
+        baseline_pairs.append((p_baseline, case.outcome))
+        per_case.append({
+            "case_id": case.case_id,
+            "outcome": case.outcome,
+            "p_sim": round(p_sim, 4),
+            "p_baseline": round(p_baseline, 4),
+            "direction_sim": result.report.direction,
+            "confidence_sim": result.report.confidence,
+        })
+
+    bs = brier_score(sim_pairs)
+    bb = brier_score(baseline_pairs)
+    delta = round(bs - bb, 4)
+    if delta < -0.01:
+        verdict = "sim_better"
+    elif delta > 0.01:
+        verdict = "baseline_better"
+    else:
+        verdict = "tie"
+
+    return {
+        "cases": len(cases),
+        "brier_sim": bs,
+        "brier_baseline": bb,
+        "brier_delta": delta,
+        "verdict": verdict,
+        "per_case": per_case,
+    }

@@ -23,8 +23,8 @@ def test_estimate_run():
         standard_model="deepseek/deepseek-chat",
         cheap_model="deepseek/deepseek-chat",
     )
-    assert est["calls_min"] >= 4
-    assert est["calls_max"] <= 7
+    assert est["calls_min"] >= 5
+    assert est["calls_max"] <= 9
     assert est["cost_min_usd"] is not None
     assert est["cost_max_usd"] is not None
     assert est["cost_min_usd"] > 0

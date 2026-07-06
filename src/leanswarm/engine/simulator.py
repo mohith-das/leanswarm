@@ -19,6 +19,7 @@ from leanswarm.engine.models import (
     ActivationMode,
     AgentAction,
     AgentState,
+    PersonaBatchResponse,
     PredictionReport,
     RelationshipEdge,
     SeedWorld,
@@ -105,6 +106,23 @@ class LeanSwarmEngine:
         stable_streak = 0
         converged = False
 
+        if request.use_llm and not self.settings.dry_run:
+            persona_response = await self.router.route(
+                TaskType.PERSONA_BATCH,
+                {
+                    "question": request.question,
+                    "summary": seed_world.profile.summary,
+                    "world_topics": [t.label for t in seed_world.profile.topics[:6]],
+                    "world_entities": [e.label for e in seed_world.profile.entities[:8]],
+                    "use_llm": request.use_llm,
+                    "agents": [
+                        {"id": a.id, "name": a.name, "archetype": a.archetype}
+                        for a in agents
+                    ],
+                },
+            )
+            self._apply_personas(agents, persona_response)
+
         await _emit({"type": "phase", "phase": "bootstrap", "status": "running", "agent_count": len(agents)})
 
         bootstrap = await self.router.route(
@@ -161,6 +179,8 @@ class LeanSwarmEngine:
                                     "mood": agent.mood,
                                     "energy": agent.energy,
                                     "attention": agent.attention,
+                                    "persona": agent.persona or "",
+                                    "stance": agent.stance or "",
                                 }
                                 for agent in group
                             ],
@@ -247,6 +267,7 @@ class LeanSwarmEngine:
             cache_hit_rate=self.router.cache_hit_rate,
             average_active_fraction=self._average_active_fraction(ticks),
             activation_envelope_hit_rate=self._activation_envelope_hit_rate(ticks),
+            direction=str(synthesis.get("direction", "")),
         )
         world = self._build_world_snapshot(
             agents,
@@ -406,6 +427,20 @@ class LeanSwarmEngine:
             convergence_score=0.0,
             stable=False,
         )
+
+    def _apply_personas(self, agents: list[AgentState], response: dict[str, Any]) -> None:
+        parsed = PersonaBatchResponse.model_validate(response)
+        by_id = {p.agent_id: p for p in parsed.personas}
+        for agent in agents:
+            persona = by_id.get(agent.id)
+            if persona is None:
+                continue
+            if persona.display_name:
+                agent.name = persona.display_name[:60]
+            if persona.persona:
+                agent.persona = persona.persona[:300]
+            if persona.stance:
+                agent.stance = persona.stance[:200]
 
     def _build_world_snapshot(
         self,

@@ -23,6 +23,9 @@ class StartRunRequest(BaseModel):
     api_base: str | None = None
     api_key: str | None = None
     title: str | None = None
+    source_urls: list[str] = Field(default_factory=list)
+    use_search: bool = False
+    max_sources: int = 4
 
     def sanitize(self) -> dict[str, Any]:
         data = self.model_dump()
@@ -51,3 +54,14 @@ class DoctorRequest(BaseModel):
     api_base: str | None = None
     api_key: str | None = None
     ping: bool = False
+
+
+class ChatRequest(BaseModel):
+    agent_id: str | None = None
+    message: str
+    history: list[dict[str, str]] = Field(default_factory=list)
+    live: bool = False
+    models: TierModels | None = None
+    credentials: dict[str, str] = Field(default_factory=dict)
+    api_base: str | None = None
+    api_key: str | None = None

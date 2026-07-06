@@ -96,3 +96,12 @@ export function getOverrides(): { api_base?: string; api_key?: string } {
   if (stored.LEANSWARM_API_KEY) out.api_key = stored.LEANSWARM_API_KEY;
   return out;
 }
+
+export function getSearchCredentials(): Record<string, string> {
+  let stored: Record<string, string> = {};
+  try { stored = JSON.parse(localStorage.getItem('leanswarm.keys.v1') || '{}'); } catch { /* ignore */ }
+  const out: Record<string, string> = {};
+  if (stored.TAVILY_API_KEY) out.TAVILY_API_KEY = stored.TAVILY_API_KEY;
+  if (stored.BRAVE_API_KEY) out.BRAVE_API_KEY = stored.BRAVE_API_KEY;
+  return out;
+}

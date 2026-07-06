@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import ForceGraph from '../components/ForceGraph';
+import ChatPanel from '../components/ChatPanel';
 
-type Phase = 'bootstrap' | 'simulation' | 'synthesis';
+type Phase = 'sources' | 'bootstrap' | 'simulation' | 'synthesis';
 type PhaseStatus = 'waiting' | 'running' | 'done';
 
 const KIND_COLORS: Record<string, string> = {
@@ -13,9 +14,10 @@ const KIND_COLORS: Record<string, string> = {
 
 export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const isGallery = readOnly;
 
-  const [phases, setPhases] = useState<Record<Phase, PhaseStatus>>({ bootstrap: 'waiting', simulation: 'waiting', synthesis: 'waiting' });
+  const [phases, setPhases] = useState<Record<Phase, PhaseStatus>>({ sources: 'waiting', bootstrap: 'waiting', simulation: 'waiting', synthesis: 'waiting' });
   const [currentTick, setCurrentTick] = useState(0);
   const [totalRounds, setTotalRounds] = useState(0);
   const [ticks, setTicks] = useState<any[]>([]);
@@ -28,6 +30,9 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
   const [graphView, setGraphView] = useState<'agents' | 'knowledge'>('agents');
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
+  const [reportContent, setReportContent] = useState<{ title: string; sections: Array<{ heading: string; content: string }> } | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [sourceCount, setSourceCount] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -75,6 +80,9 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
         if (evt.phase === 'simulation' && evt.tick) {
           setCurrentTick(evt.tick);
           setTotalRounds(evt.rounds);
+        }
+        if (evt.phase === 'sources' && evt.status === 'done') {
+          setSourceCount(evt.count ?? 0);
         }
         break;
       case 'tick':
@@ -130,6 +138,25 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
     URL.revokeObjectURL(url);
   }
 
+  async function handleReport() {
+    if (!id) return;
+    setReportLoading(true);
+    try {
+      const res = await api.report(id, { live: false });
+      setReportContent(res);
+    } catch (_err) {
+      setSaveMsg('Could not generate report.');
+    } finally {
+      setReportLoading(false);
+    }
+  }
+
+  function openInComposer() {
+    const reqData = result?.request ?? {};
+    sessionStorage.setItem('leanswarm.rerun.v1', JSON.stringify(reqData));
+    navigate('/');
+  }
+
   if (status === 'error') {
     return (
       <div className="card error-card">
@@ -144,12 +171,14 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
     return (
       <div className="run-live">
         <div className="phase-timeline">
-          {(['bootstrap', 'simulation', 'synthesis'] as Phase[]).map((p) => (
+          {(['sources', 'bootstrap', 'simulation', 'synthesis'] as Phase[]).map((p) => {
+            if (p === 'sources' && phases.sources === 'waiting') return null;
+            return (
             <div key={p} className={`phase-chip phase-${phases[p]}`}>
-              {p === 'simulation' && phases[p] === 'running' ? `Simulation (tick ${currentTick}/${totalRounds})` : p[0].toUpperCase() + p.slice(1)}
+              {p === 'simulation' && phases[p] === 'running' ? `Simulation (tick ${currentTick}/${totalRounds})` : p === 'sources' && phases[p] === 'done' ? `Sources (${sourceCount})` : p[0].toUpperCase() + p.slice(1)}
               {phases[p] === 'done' && ' ✓'}
             </div>
-          ))}
+          )})}
         </div>
         <div className="cost-ticker card">
           {llmCalls} calls · {tokensTotal.prompt + tokensTotal.completion} tokens
@@ -186,7 +215,19 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
   const kgEdges = (world.graph?.edges || []).map((e: any) => ({ source: e.source, target: e.target, weight: e.weight }));
 
   return (
+    <>
     <div className="run-result">
+      {result.request?.retrieved_sources?.length > 0 && (
+        <div className="card">
+          <h3>Sources</h3>
+          {result.request.retrieved_sources.map((s: any, i: number) => (
+            <div key={i} className="source-entry">
+              <a href={s.url} target="_blank" rel="noopener noreferrer">{s.title || s.url}</a>
+              <span className="muted"> · {s.chars} chars · <span className="chip chip-ok">{s.via}</span></span>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="card prediction-card">
         <h2>{report.prediction}</h2>
         <div className="confidence-meter">
@@ -208,6 +249,8 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
           <div key={a.id} className="card agent-card">
             <strong>{a.name}</strong>
             <div className="muted">{a.archetype}</div>
+            {a.persona && <div className="muted" style={{ fontSize: '0.85rem', marginTop: '0.25rem' }}>{a.persona}</div>}
+            {a.stance && <div className="muted" style={{ fontSize: '0.85rem', fontStyle: 'italic', marginTop: '0.15rem' }}>{a.stance}</div>}
             <div className="bar-row"><span>mood</span><div className="bar"><div style={{ width: `${a.mood * 100}%` }} /></div></div>
             <div className="bar-row"><span>energy</span><div className="bar"><div style={{ width: `${a.energy * 100}%` }} /></div></div>
             <div className="bar-row"><span>attention</span><div className="bar"><div style={{ width: `${a.attention * 100}%` }} /></div></div>
@@ -246,14 +289,38 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
           <button className="btn" onClick={handleDownload}>Download JSON</button>
           <button className="btn" onClick={handleSave}>Save</button>
           <button className="btn btn-accent" onClick={handlePublish}>Publish to gallery</button>
+          <button className="btn" onClick={handleReport} disabled={reportLoading}>{reportLoading ? 'Generating…' : 'Generate full report'}</button>
+          <button className="btn" onClick={openInComposer}>Open in composer</button>
           {saveMsg && <span className="muted">{saveMsg}</span>}
         </div>
       )}
       {isGallery && (
         <div className="action-bar">
           <button className="btn" onClick={handleDownload}>Download JSON</button>
+          <button className="btn" onClick={handleReport} disabled={reportLoading}>{reportLoading ? 'Generating…' : 'Generate full report'}</button>
+          <button className="btn" onClick={openInComposer}>Open in composer</button>
+        </div>
+      )}
+      {reportContent && (
+        <div className="card report-display">
+          <h2>{reportContent.title}</h2>
+          {reportContent.sections.map((s, i) => (
+            <div key={i}>
+              <h3>{s.heading}</h3>
+              <p>{s.content}</p>
+            </div>
+          ))}
+          <button className="btn" onClick={() => {
+            const md = `# ${reportContent.title}\n\n${reportContent.sections.map((s: { heading: string; content: string }) => `## ${s.heading}\n\n${s.content}`).join('\n\n')}`;
+            const blob = new Blob([md], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = 'report.md'; a.click(); URL.revokeObjectURL(url);
+          }}>Download .md</button>
         </div>
       )}
     </div>
+    <ChatPanel runId={id || ''} agents={(result?.world?.agents || []).map((a: any) => ({ id: a.id, name: a.name }))} />
+    </>
   );
 }

@@ -706,3 +706,98 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   border: 1px solid rgba(15, 118, 110, 0.2);
   margin-bottom: 0.75rem;
 }
+
+/* Chat panel */
+.chat-panel {
+  margin-top: 2rem;
+}
+
+.chat-history {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chat-turn {
+  padding: 0.6rem 1rem;
+  border-radius: 10px;
+  max-width: 80%;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+.chat-user {
+  align-self: flex-end;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--text);
+}
+
+.chat-assistant {
+  align-self: flex-start;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.chat-input-row {
+  gap: 0.75rem;
+}
+
+.chat-input-row input {
+  margin-bottom: 0;
+}
+
+.chat-controls {
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.chat-controls input {
+  width: 160px;
+  margin-bottom: 0;
+}
+
+/* Report display */
+.report-display h3 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.25rem;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.report-display p {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Sources */
+.source-entry {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.source-entry a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.source-entry a:hover {
+  text-decoration: underline;
+}
+
+/* Modal section heading */
+.modal-section-heading {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
