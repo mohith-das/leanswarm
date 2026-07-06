@@ -44,6 +44,7 @@ export interface EstimateRequest {
   group_size: number;
   active_agent_fraction: number;
   models: TierModels;
+  seed_chars: number;
 }
 
 export interface DoctorRequest {

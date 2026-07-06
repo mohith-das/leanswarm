@@ -209,7 +209,7 @@ export default function Composer() {
         )}
       </div>
 
-      <CostEstimate live={live} rounds={rounds} maxAgents={maxAgents} groupSize={groupSize} activeAgentFraction={activeAgentFraction} models={models} />
+      <CostEstimate live={live} rounds={rounds} maxAgents={maxAgents} groupSize={groupSize} activeAgentFraction={activeAgentFraction} models={models} seedChars={seedDocument.length} />
 
       {error && <div className="card error-card">{error}</div>}
 

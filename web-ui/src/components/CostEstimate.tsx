@@ -8,9 +8,10 @@ interface Props {
   groupSize: number;
   activeAgentFraction: number;
   models: { flagship: string; standard: string; cheap: string };
+  seedChars: number;
 }
 
-export default function CostEstimate({ live, rounds, maxAgents, groupSize, activeAgentFraction, models }: Props) {
+export default function CostEstimate({ live, rounds, maxAgents, groupSize, activeAgentFraction, models, seedChars }: Props) {
   const [estimate, setEstimate] = useState<Awaited<ReturnType<typeof api.estimate>> | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -18,13 +19,13 @@ export default function CostEstimate({ live, rounds, maxAgents, groupSize, activ
     if (!live) { setEstimate(null); return; }
     setLoading(true);
     const handle = setTimeout(() => {
-      api.estimate({ rounds, max_agents: maxAgents, group_size: groupSize, active_agent_fraction: activeAgentFraction, models })
+      api.estimate({ rounds, max_agents: maxAgents, group_size: groupSize, active_agent_fraction: activeAgentFraction, models, seed_chars: seedChars })
         .then(setEstimate)
         .catch(() => setEstimate(null))
         .finally(() => setLoading(false));
     }, 400);
     return () => clearTimeout(handle);
-  }, [live, rounds, maxAgents, groupSize, activeAgentFraction, models.flagship, models.standard, models.cheap]);
+  }, [live, rounds, maxAgents, groupSize, activeAgentFraction, models.flagship, models.standard, models.cheap, seedChars]);
 
   if (!live) {
     return <div className="card cost-estimate">Mock mode — free, deterministic, no API calls.</div>;
