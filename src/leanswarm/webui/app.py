@@ -308,7 +308,8 @@ def create_webui_app() -> FastAPI:
             group_size=req.group_size,
             flagship_model=req.models.flagship,
             standard_model=req.models.standard,
-            cheap_model=req.models.cheap
+            cheap_model=req.models.cheap,
+            seed_chars=req.seed_chars,
         )
 
     @app.post("/api/doctor")

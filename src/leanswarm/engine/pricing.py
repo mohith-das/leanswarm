@@ -3,6 +3,8 @@
 import math
 from typing import Any
 
+from leanswarm.engine.enrichment import EXTRACTION_MAX_CHARS
+
 PRICES: dict[str, tuple[float, float]] = {
     "gpt-4.1": (2.00, 8.00),
     "gpt-4.1-mini": (0.40, 1.60),
@@ -47,16 +49,20 @@ def estimate_run(
     flagship_model: str,
     standard_model: str,
     cheap_model: str,
+    seed_chars: int = 0,
 ) -> dict[str, Any]:
     """
     Estimates the LLM calls, tokens, and cost of a simulation run.
     Assumptions:
     - active = max(1, round(max_agents * active_agent_fraction))
     - batches_per_tick = ceil(active / group_size)
-    - Calls: 1 bootstrap (standard tier) + rounds * batches_per_tick agent-batch (cheap tier) 
-      + up to rounds memory-summary calls (standard tier) + 1 synthesis (flagship tier).
+    - Calls: 1 world_extraction (cheap tier, LIVE ONLY — single pass over up to
+      EXTRACTION_MAX_CHARS of the seed, no chunking) + 1 bootstrap (standard tier)
+      + rounds * batches_per_tick agent-batch (cheap tier) + up to rounds
+      memory-summary calls (standard tier) + 1 synthesis (flagship tier).
     - Early convergence can reduce tick count. min_ticks = min(2, rounds), max_ticks = rounds.
     - Tokens:
+      extraction: 350 + min(seed_chars, 6000)//4 in / 450 out
       bootstrap: 450 in / 130 out
       agent batch: 550 + 60 * group_size in / 40 + 45 * group_size out
       memory summary: 400 in / 90 out
@@ -68,8 +74,12 @@ def estimate_run(
     min_ticks = min(2, rounds)
     max_ticks = rounds
 
-    calls_min = 1 + (min_ticks * batches_per_tick) + 1
-    calls_max = 1 + (max_ticks * batches_per_tick) + max_ticks + 1
+    capped_seed_chars = min(max(seed_chars, 0), EXTRACTION_MAX_CHARS)
+    prompt_extraction = 350 + capped_seed_chars // 4
+    comp_extraction = 450
+
+    calls_min = 1 + 1 + (min_ticks * batches_per_tick) + 1
+    calls_max = 1 + 1 + (max_ticks * batches_per_tick) + max_ticks + 1
 
     prompt_bootstrap, comp_bootstrap = 450, 130
     prompt_batch = 550 + 60 * group_size
@@ -80,12 +90,14 @@ def estimate_run(
 
     # Max tokens
     prompt_tokens_est = (
+        prompt_extraction +
         prompt_bootstrap +
         (max_ticks * batches_per_tick * prompt_batch) +
         (max_ticks * prompt_mem) +
         prompt_synth
     )
     completion_tokens_est = (
+        comp_extraction +
         comp_bootstrap +
         (max_ticks * batches_per_tick * comp_batch) +
         (max_ticks * comp_mem) +
@@ -109,15 +121,21 @@ def estimate_run(
         c_boot = cost_usd(standard_model, prompt_bootstrap, comp_bootstrap) or 0.0
         c_mem_max = cost_usd(standard_model, prompt_mem, comp_mem) or 0.0
 
-        # cheap_model: agent batch
+        # cheap_model: extraction + agent batch
+        c_extraction = cost_usd(cheap_model, prompt_extraction, comp_extraction) or 0.0
         c_batch = cost_usd(cheap_model, prompt_batch, comp_batch) or 0.0
 
         # flagship_model: synthesis
         c_synth_max = cost_usd(flagship_model, prompt_synth, comp_synth) or 0.0
         c_synth_min = cost_usd(flagship_model, prompt_synth_min, comp_synth_min) or 0.0
 
-        cost_min_usd = c_boot + (min_ticks * batches_per_tick * c_batch) + c_synth_min
-        cost_max_usd = c_boot + (max_ticks * batches_per_tick * c_batch) + (max_ticks * c_mem_max) + c_synth_max
+        cost_min_usd = c_extraction + c_boot + (min_ticks * batches_per_tick * c_batch) + c_synth_min
+        cost_max_usd = (
+            c_extraction + c_boot
+            + (max_ticks * batches_per_tick * c_batch)
+            + (max_ticks * c_mem_max)
+            + c_synth_max
+        )
 
     return {
         "calls_min": calls_min,

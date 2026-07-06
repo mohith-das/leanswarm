@@ -43,6 +43,7 @@ class EstimateRequest(BaseModel):
     group_size: int = 4
     active_agent_fraction: float = 0.2
     models: TierModels
+    seed_chars: int = 0
 
 class DoctorRequest(BaseModel):
     models: TierModels
