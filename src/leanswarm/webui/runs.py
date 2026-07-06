@@ -114,9 +114,10 @@ class RunManager:
             try:
                 result = await engine.simulate(sim_request, on_progress=push)
                 c_usd = run_cost(engine.router)
+                result_dump: dict[str, Any] = result.model_dump()
                 complete_event = {
                     "type": "complete",
-                    "result": result.model_dump(),
+                    "result": result_dump,
                     "prompt_tokens_total": engine.router.prompt_tokens_total,
                     "completion_tokens_total": engine.router.completion_tokens_total,
                     "cost_usd": c_usd,
@@ -124,7 +125,7 @@ class RunManager:
                 async with job.cond:
                     job.events.append(complete_event)
                     job.status = "complete"
-                    job.result = complete_event["result"]
+                    job.result = result_dump
                     job.finished_at = time.monotonic()
                     job.cond.notify_all()
             except Exception as exc:

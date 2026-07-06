@@ -230,3 +230,22 @@ def test_progress_callback():
     assert any(e.get("type") == "tick" and "prompt_tokens_total" in e for e in events)
     assert any(e.get("phase") == "synthesis" and e.get("status") == "running" for e in events)
     assert any(e.get("phase") == "synthesis" and e.get("status") == "done" for e in events)
+
+
+def test_credential_gate_with_real_validate_environment(monkeypatch):
+    # Regression: browser-provided per-run credentials must satisfy the gate even
+    # when litellm.validate_environment is active (it only sees real env vars, so
+    # it must not be allowed to veto credentials it cannot see).
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    router = LiteLLMRouter(
+        RuntimeSettings(dry_run=False, credentials={"DEEPSEEK_API_KEY": "browser-key"})
+    )
+    ready, missing = router._live_ready("deepseek/deepseek-chat")
+    assert ready is True
+    assert missing == []
+    assert router._resolve_api_key("deepseek/deepseek-chat") == "browser-key"
+
+    bare = LiteLLMRouter(RuntimeSettings(dry_run=False))
+    ready, missing = bare._live_ready("deepseek/deepseek-chat")
+    assert ready is False
+    assert "DEEPSEEK_API_KEY" in missing

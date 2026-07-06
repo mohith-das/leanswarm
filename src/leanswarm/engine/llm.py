@@ -350,6 +350,15 @@ class LiteLLMRouter:
         if self.settings.api_key:
             return True, []
 
+        # Per-run credentials (e.g. browser-provided keys in the web UI) are not
+        # visible to litellm's env-based validation, so check them first.
+        prefix = model.split("/", 1)[0] if "/" in model else "openai"
+        required = _PROVIDER_ENV_KEYS.get(prefix)
+        if required is not None and required and all(
+            self.settings.credentials.get(k) for k in required
+        ):
+            return True, []
+
         try:
             from litellm import validate_environment
             res = validate_environment(model=model)
@@ -357,7 +366,6 @@ class LiteLLMRouter:
         except Exception:
             pass
 
-        prefix = model.split("/", 1)[0] if "/" in model else "openai"
         if prefix not in _PROVIDER_ENV_KEYS:
             return True, []
 

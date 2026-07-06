@@ -5,7 +5,9 @@ import secrets
 import sqlite3
 import time
 from collections import deque
+from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -44,11 +46,11 @@ def create_webui_app() -> FastAPI:
     ip_history: dict[str, deque[float]] = {}
     
     @app.on_event("startup")
-    async def startup():
+    async def startup() -> None:
         asyncio.create_task(run_manager.purge_loop())
 
     @app.post("/api/auth/register")
-    def register(req: AuthRequest, request: Request):
+    def register(req: AuthRequest, request: Request) -> JSONResponse:
         if not settings.allow_signup:
             raise HTTPException(403, "Signup disabled")
         if len(req.password) < 8 or len(req.password) > 128:
@@ -81,7 +83,7 @@ def create_webui_app() -> FastAPI:
         return resp
 
     @app.post("/api/auth/login")
-    def login(req: AuthRequest, request: Request):
+    def login(req: AuthRequest, request: Request) -> JSONResponse:
         c: sqlite3.Connection = request.app.state.db
         row = c.execute("SELECT id, email, password_hash FROM users WHERE email = ?", (req.email,)).fetchone()
         if not row or not verify_password(req.password, row["password_hash"]):
@@ -101,7 +103,7 @@ def create_webui_app() -> FastAPI:
         return resp
 
     @app.post("/api/auth/logout")
-    def logout(request: Request):
+    def logout(request: Request) -> JSONResponse:
         token = request.cookies.get("leanswarm_session")
         if token:
             token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
@@ -113,11 +115,11 @@ def create_webui_app() -> FastAPI:
         return resp
 
     @app.get("/api/auth/me")
-    def get_me(user: sqlite3.Row | None = Depends(get_current_user)):  # noqa: B008
+    def get_me(user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
         return {"email": user["email"] if user else None}
 
     @app.post("/api/runs")
-    async def start_run(req: StartRunRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)):  # noqa: B008
+    async def start_run(req: StartRunRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
         ip = request.client.host if request.client else "unknown"
         now = time.time()
         if settings.runs_per_hour_per_ip > 0:
@@ -139,12 +141,12 @@ def create_webui_app() -> FastAPI:
         return {"id": run_id}
 
     @app.get("/api/runs/{id}/events")
-    async def stream_events(id: str, request: Request):
+    async def stream_events(id: str, request: Request) -> StreamingResponse:
         job = run_manager.jobs.get(id)
         if not job:
             raise HTTPException(404, "Run not found or purged")
             
-        async def gen():
+        async def gen() -> AsyncIterator[str]:
             idx = 0
             while True:
                 if await request.is_disconnected():
@@ -165,7 +167,7 @@ def create_webui_app() -> FastAPI:
         return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/api/runs/{id}")
-    def get_run(id: str, request: Request, user: sqlite3.Row | None = Depends(get_current_user)):  # noqa: B008
+    def get_run(id: str, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         row = c.execute("SELECT * FROM runs WHERE id = ?", (id,)).fetchone()
         
@@ -199,7 +201,7 @@ def create_webui_app() -> FastAPI:
         raise HTTPException(404, "Run not found")
 
     @app.post("/api/runs/{id}/save")
-    def save_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row = Depends(require_user)):  # noqa: B008
+    def save_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row = Depends(require_user)) -> dict[str, Any]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         
         row = c.execute("SELECT id, user_id FROM runs WHERE id = ?", (id,)).fetchone()
@@ -239,7 +241,7 @@ def create_webui_app() -> FastAPI:
         return {"id": job.id}
 
     @app.post("/api/runs/{id}/publish")
-    def publish_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)):  # noqa: B008
+    def publish_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         
         row = c.execute("SELECT id, user_id, is_public FROM runs WHERE id = ?", (id,)).fetchone()
@@ -278,7 +280,7 @@ def create_webui_app() -> FastAPI:
         return {"id": job.id}
 
     @app.get("/api/runs")
-    def list_runs(request: Request, user: sqlite3.Row = Depends(require_user)):  # noqa: B008
+    def list_runs(request: Request, user: sqlite3.Row = Depends(require_user)) -> list[dict[str, Any]]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         rows = c.execute("SELECT id, title, question, created_at, is_public, models_json, cost_usd FROM runs WHERE user_id = ? ORDER BY created_at DESC", (user["id"],)).fetchall()
         return [
@@ -290,7 +292,7 @@ def create_webui_app() -> FastAPI:
         ]
 
     @app.delete("/api/runs/{id}")
-    def delete_run(id: str, request: Request, user: sqlite3.Row = Depends(require_user)):  # noqa: B008
+    def delete_run(id: str, request: Request, user: sqlite3.Row = Depends(require_user)) -> dict[str, Any]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         row = c.execute("SELECT user_id FROM runs WHERE id = ?", (id,)).fetchone()
         if not row or row["user_id"] != user["id"]:
@@ -300,7 +302,7 @@ def create_webui_app() -> FastAPI:
         return {"ok": True}
 
     @app.post("/api/estimate")
-    def estimate(req: EstimateRequest):
+    def estimate(req: EstimateRequest) -> dict[str, Any]:
         return estimate_run(
             rounds=req.rounds,
             max_agents=req.max_agents,
@@ -313,7 +315,7 @@ def create_webui_app() -> FastAPI:
         )
 
     @app.post("/api/doctor")
-    def doctor(req: DoctorRequest):
+    def doctor(req: DoctorRequest) -> list[dict[str, Any]]:
         eng_settings = RuntimeSettings.from_env()
         eng_settings.dry_run = False
         eng_settings.credentials = req.credentials.copy()
@@ -356,7 +358,7 @@ def create_webui_app() -> FastAPI:
         return results
 
     @app.get("/api/gallery")
-    def gallery(request: Request, limit: int = 20, offset: int = 0):
+    def gallery(request: Request, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
         limit = min(50, max(1, limit))
         c: sqlite3.Connection = request.app.state.db
         rows = c.execute(
@@ -383,7 +385,7 @@ def create_webui_app() -> FastAPI:
         return out
 
     @app.get("/api/gallery/{id}")
-    def get_gallery_item(id: str, request: Request):
+    def get_gallery_item(id: str, request: Request) -> dict[str, Any]:
         c: sqlite3.Connection = request.app.state.db
         row = c.execute("SELECT * FROM runs WHERE id = ? AND is_public = 1", (id,)).fetchone()
         if not row:
@@ -400,14 +402,14 @@ def create_webui_app() -> FastAPI:
         }
 
     @app.get("/healthz")
-    def healthz():
+    def healthz() -> dict[str, str]:
         return {"status": "ok"}
         
     static_dir = Path(__file__).parent / "static"
     if (static_dir / "index.html").exists():
         app.mount("/assets", StaticFiles(directory=static_dir / "assets"), name="assets")
         @app.get("/{full_path:path}", include_in_schema=False)
-        def spa(full_path: str):
+        def spa(full_path: str) -> FileResponse:
             if full_path.startswith("api/"):
                 raise HTTPException(404)
             path = static_dir / full_path
@@ -416,7 +418,7 @@ def create_webui_app() -> FastAPI:
             return FileResponse(static_dir / "index.html")
     else:
         @app.get("/")
-        def fallback_root():
+        def fallback_root() -> JSONResponse:
             return JSONResponse({"status": "frontend not built"})
 
     return app
