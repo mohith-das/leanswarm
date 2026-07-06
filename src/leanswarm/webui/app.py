@@ -44,9 +44,24 @@ def create_webui_app() -> FastAPI:
     run_manager = RunManager(settings)
     app.state.run_manager = run_manager
     
-    # Rate limiting
+    # Rate limiting: separate buckets for run starts and chat/report calls.
     ip_history: dict[str, deque[float]] = {}
-    
+    chat_ip_history: dict[str, deque[float]] = {}
+
+    def check_rate_limit(
+        bucket: dict[str, deque[float]], ip: str, limit: int, label: str
+    ) -> None:
+        if limit <= 0:
+            return
+        q = bucket.setdefault(ip, deque())
+        now = time.time()
+        while q and q[0] < now - 3600:
+            q.popleft()
+        if len(q) >= limit:
+            raise HTTPException(429, f"{label} rate limit exceeded")
+        q.append(now)
+
+
     @app.on_event("startup")
     async def startup() -> None:
         asyncio.create_task(run_manager.purge_loop())
@@ -413,22 +428,10 @@ def create_webui_app() -> FastAPI:
         from leanswarm.engine.llm import LiveCredentialsError
         from leanswarm.webui.chat import run_chat
 
-        # Rate limit
+        if not req.message.strip():
+            raise HTTPException(422, "message is required")
         ip = request.client.host if request.client else "unknown"
-        now = time.time()
-        if settings.chats_per_hour_per_ip > 0:
-            history = (ip_history.get("chat") or ip_history.setdefault("chat", {}))  # type: ignore[assignment]
-            if isinstance(history, dict):
-                q = history.setdefault(ip, deque())
-            else:
-                q = ip_history.setdefault(ip, deque())
-            if not isinstance(q, deque):
-                q = deque()
-            while q and q[0] < now - 3600:
-                q.popleft()
-            if len(q) >= settings.chats_per_hour_per_ip:
-                raise HTTPException(429, "Chat rate limit exceeded")
-            q.append(now)
+        check_rate_limit(chat_ip_history, ip, settings.chats_per_hour_per_ip, "Chat")
 
         # Resolve the run result
         job = run_manager.jobs.get(id)
@@ -474,17 +477,7 @@ def create_webui_app() -> FastAPI:
         from leanswarm.engine.llm import LiveCredentialsError
 
         ip = request.client.host if request.client else "unknown"
-        now = time.time()
-        if settings.chats_per_hour_per_ip > 0:
-            history = ip_history.get("chat", {})
-            if not isinstance(history, dict):
-                history = {}
-            q = history.setdefault(ip, deque())
-            while q and q[0] < now - 3600:
-                q.popleft()
-            if len(q) >= settings.chats_per_hour_per_ip:
-                raise HTTPException(429, "Report rate limit exceeded")
-            q.append(now)
+        check_rate_limit(chat_ip_history, ip, settings.chats_per_hour_per_ip, "Report")
 
         job = run_manager.jobs.get(id)
         result: dict[str, Any] | None = None

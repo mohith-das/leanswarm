@@ -6,6 +6,24 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-06
+
+### Fixed
+- "Generate full report" always failed with a 422: the report endpoint reused the
+  chat request schema, whose `message` field was required, but the UI sends no
+  message for reports. The field is now optional (and still required for `/chat`).
+- Full reports now inherit the run's own mode and models — a live run gets a live
+  report instead of a silently mocked one.
+- Chat/report rate limiting was a no-op due to a type-confused bucket; it now uses
+  a dedicated per-IP bucket and actually enforces `LEANSWARM_UI_CHATS_PER_HOUR_PER_IP`.
+- Restored mypy strict compliance in `webui/app.py` (CI was red on 0.4.0).
+- `leanswarm.__version__` was stale (0.3.1) in the 0.4.0 wheel; now synced.
+
+### Added
+- Regression and safety tests for the 0.4.0 feature set: SSRF guard, HTML text
+  extraction, source-gathering resilience, chat and report endpoints, persona
+  gating, and calibration math.
+
 ## [0.4.0] - 2026-07-06
 
 ### Added

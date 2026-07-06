@@ -58,7 +58,7 @@ class DoctorRequest(BaseModel):
 
 class ChatRequest(BaseModel):
     agent_id: str | None = None
-    message: str
+    message: str = ""       # required for /chat (validated there); unused by /report
     history: list[dict[str, str]] = Field(default_factory=list)
     live: bool = False
     models: TierModels | None = None

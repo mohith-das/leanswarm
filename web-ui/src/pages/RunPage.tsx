@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
+import { collectCredentials, getOverrides } from '../keys';
 import ForceGraph from '../components/ForceGraph';
 import ChatPanel from '../components/ChatPanel';
 
@@ -141,11 +142,28 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
   async function handleReport() {
     if (!id) return;
     setReportLoading(true);
+    setSaveMsg(null);
     try {
-      const res = await api.report(id, { live: false });
+      // Inherit the run's own mode and models: a live run gets a live report.
+      const body: Record<string, unknown> = { live: false };
+      try {
+        const meta = isGallery ? await api.galleryItem(id) : await api.getRun(id);
+        if (meta?.models?.live) {
+          const models = {
+            flagship: meta.models.flagship,
+            standard: meta.models.standard,
+            cheap: meta.models.cheap,
+          };
+          body.live = true;
+          body.models = models;
+          body.credentials = collectCredentials(Object.values(models));
+          Object.assign(body, getOverrides());
+        }
+      } catch { /* fall back to a mock-mode report */ }
+      const res = await api.report(id, body);
       setReportContent(res);
-    } catch (_err) {
-      setSaveMsg('Could not generate report.');
+    } catch (err: any) {
+      setSaveMsg(`Could not generate report: ${err?.message || 'unknown error'}`);
     } finally {
       setReportLoading(false);
     }
