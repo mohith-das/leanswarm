@@ -6,6 +6,18 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-07-06
+
+### Changed
+- Composer model selection is now provider-first: the user picks a provider from a
+  dropdown (only showing providers whose API keys are set), then picks or types a
+  model name with contextual suggestions. The Live tab is disabled when no API keys
+  are stored.
+- The "leanswarm" logo is now clickable and navigates to the composer.
+- The "LLM-extracted world" badge in the result view is no longer rendered inside
+  the graph toggle segmented control (it appeared as a non-functional third tab).
+- Advanced settings grid uses a fixed 3-column layout for consistent alignment.
+
 ## [0.3.1] - 2026-07-06
 
 ### Added
