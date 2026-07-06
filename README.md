@@ -53,6 +53,8 @@ Dry-run is the default. To use real models, set `LEANSWARM_DRY_RUN=false` or pas
 Verify your credentials with `leanswarm doctor` or `leanswarm doctor --ping`.
 Live-mode responses are schema-validated with one automatic repair attempt. If a model cannot produce valid JSON after repair, a logged `mock_fallback` occurs.
 
+In live mode, the engine runs a single cheap-tier LLM extraction pass over up to 6000 characters of the seed document before the simulation begins, replacing n-gram keyword topics/entities with typed entities and relations in the world profile, agent memory, and knowledge graph. This costs exactly one extra cheap-tier call per live simulation. Dry-run is unaffected — the deterministic n-gram profile is used when `LEANSWARM_DRY_RUN=true`.
+
 ### Run
 
 ```bash

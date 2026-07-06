@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+### Added
+- Live mode now runs a single cheap-tier LLM extraction pass over the seed document,
+  replacing n-gram topics/entities with typed entities and relations in the world
+  profile, agent memory, prompts, and knowledge graph; falls back to the
+  deterministic profile if extraction fails. Cost estimates account for the extra call.
+
 ## [0.3.0] - 2026-07-05
 
 ### Added
