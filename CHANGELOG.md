@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-07-06
+
+### Added
+- "Open source — Audit on GitHub" badge in the web UI sidebar footer linking to the
+  repository, so hosted visitors can verify the code they're trusting with their keys.
+
 ## [0.4.1] - 2026-07-06
 
 ### Fixed

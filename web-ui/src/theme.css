@@ -801,3 +801,46 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   padding-top: 0.5rem;
   border-top: 1px solid var(--border);
 }
+
+/* GitHub open-source badge (sidebar footer) */
+.github-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.github-badge:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.github-badge svg {
+  flex-shrink: 0;
+}
+
+.github-badge:hover svg {
+  color: var(--accent);
+}
+
+.github-badge-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.github-badge-text strong {
+  font-size: 0.82rem;
+}
+
+.github-badge-text span {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
