@@ -1,0 +1,17 @@
+[Unit]
+Description=LeanSwarm Web UI
+After=network.target
+
+[Service]
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment=LEANSWARM_UI_DATA_DIR=/home/ubuntu/.leanswarm/ui
+Environment=LEANSWARM_UI_SECURE_COOKIES=true
+Environment=LEANSWARM_UI_ALLOW_SIGNUP=true
+ExecStart=/home/ubuntu/leanswarm-venv/bin/leanswarm ui --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

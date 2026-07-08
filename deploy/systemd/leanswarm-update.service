@@ -1,0 +1,31 @@
+[Unit]
+Description=LeanSwarm auto-updater
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu
+Environment="VENV=/home/ubuntu/leanswarm-venv"
+
+ExecStart=/bin/sh -c '\
+  LOG=$(mktemp); \
+  INSTALLED=$(${VENV}/bin/pip show leanswarm 2>/dev/null | sed -n "s/^Version: //p"); \
+  echo "installed=${INSTALLED:-none}" > "$LOG"; \
+  if ${VENV}/bin/pip install --upgrade leanswarm; then \
+    UPDATED=$(${VENV}/bin/pip show leanswarm 2>/dev/null | sed -n "s/^Version: //p"); \
+    OLD=$(grep "^installed=" "$LOG" | cut -d= -f2); \
+    if [ "${UPDATED}" != "${OLD}" ] && [ -n "${UPDATED}" ]; then \
+      echo "Updated leanswarm from ${OLD} to ${UPDATED} — restarting service" | systemd-cat -t leanswarm-update; \
+      systemctl restart leanswarm.service; \
+    else \
+      echo "leanswarm ${UPDATED:-none} is already current" | systemd-cat -t leanswarm-update; \
+    fi; \
+  else \
+    echo "pip install failed — leanswarm was not updated" | systemd-cat -t leanswarm-update; \
+  fi; \
+  rm -f "$LOG"'
+
+[Install]
+WantedBy=multi-user.target

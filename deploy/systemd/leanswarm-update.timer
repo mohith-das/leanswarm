@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily check for leanswarm PyPI updates
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

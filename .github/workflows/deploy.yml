@@ -1,0 +1,31 @@
+name: Deploy to leanswarm.me
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            set -e
+            REPO_DIR="$HOME/leanswarm-deploy"
+
+            if [ ! -d "$REPO_DIR" ]; then
+              GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy -o StrictHostKeyChecking=accept-new" \
+                git clone git@github.com:${{ github.repository }}.git "$REPO_DIR"
+            fi
+
+            cd "$REPO_DIR"
+            git checkout main
+            GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy -o StrictHostKeyChecking=accept-new" \
+              git pull origin main
+
+            sudo CERTBOT_EMAIL="${{ secrets.CERTBOT_EMAIL }}" bash deploy/scripts/setup.sh
