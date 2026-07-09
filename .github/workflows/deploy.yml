@@ -30,4 +30,10 @@ jobs:
             GIT_SSH_COMMAND="ssh -i ~/.ssh/github_deploy -o StrictHostKeyChecking=accept-new" \
               git pull origin main
 
+            sudo mkdir -p /home/ubuntu/.leanswarm
+            echo "LEANSWARM_SMTP_PASSWORD=${{ secrets.LEANSWARM_SMTP_PASSWORD }}" \
+              | sudo tee /home/ubuntu/.leanswarm/secrets.env > /dev/null
+            sudo chown ubuntu:ubuntu /home/ubuntu/.leanswarm/secrets.env
+            sudo chmod 600 /home/ubuntu/.leanswarm/secrets.env
+
             sudo CERTBOT_EMAIL="${{ secrets.CERTBOT_EMAIL }}" bash deploy/scripts/setup.sh

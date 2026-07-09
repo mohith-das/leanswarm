@@ -9,6 +9,11 @@ WorkingDirectory=/home/ubuntu
 Environment=LEANSWARM_UI_DATA_DIR=/home/ubuntu/.leanswarm/ui
 Environment=LEANSWARM_UI_SECURE_COOKIES=true
 Environment=LEANSWARM_UI_ALLOW_SIGNUP=true
+Environment=LEANSWARM_SMTP_HOST=smtp.purelymail.com
+Environment=LEANSWARM_SMTP_PORT=465
+Environment=LEANSWARM_SMTP_USERNAME=noreply@leanswarm.me
+Environment=LEANSWARM_FROM_EMAIL=noreply@leanswarm.me
+EnvironmentFile=/home/ubuntu/.leanswarm/secrets.env
 ExecStart=/home/ubuntu/leanswarm-venv/bin/leanswarm ui --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5

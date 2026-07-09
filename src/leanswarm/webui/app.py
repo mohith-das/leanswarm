@@ -20,13 +20,16 @@ from leanswarm.engine.pricing import estimate_run
 from leanswarm.webui.auth import get_current_user, hash_password, require_user, verify_password
 from leanswarm.webui.config import WebUISettings
 from leanswarm.webui.db import connect, init_db
+from leanswarm.webui.email import send_password_reset_email
 from leanswarm.webui.runs import RunManager
 from leanswarm.webui.schemas import (
     AuthRequest,
     ChatRequest,
     DoctorRequest,
     EstimateRequest,
+    ForgotPasswordRequest,
     PublishRequest,
+    ResetPasswordRequest,
     StartRunRequest,
 )
 
@@ -134,6 +137,46 @@ def create_webui_app() -> FastAPI:
     @app.get("/api/auth/me")
     def get_me(user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
         return {"email": user["email"] if user else None}
+
+    @app.post("/api/auth/forgot-password")
+    def forgot_password(req: ForgotPasswordRequest, request: Request) -> dict[str, Any]:
+        if not settings.smtp_host:
+            raise HTTPException(500, "SMTP not configured")
+        c: sqlite3.Connection = request.app.state.db
+        row = c.execute("SELECT id FROM users WHERE email = ?", (req.email,)).fetchone()
+        if row:
+            token = secrets.token_urlsafe(32)
+            token_hash = __import__('hashlib').sha256(token.encode()).hexdigest()
+            expires = datetime.datetime.now(datetime.UTC) + datetime.timedelta(hours=1)
+            c.execute("DELETE FROM password_resets WHERE user_id = ?", (row["id"],))
+            c.execute(
+                "INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)",
+                (token_hash, row["id"], expires.isoformat()),
+            )
+            reset_url = str(request.base_url).rstrip("/") + "/reset-password?token=" + token
+            send_password_reset_email(req.email, reset_url, settings)
+            c.commit()
+        return {"ok": True}
+
+    @app.post("/api/auth/reset-password")
+    def reset_password(req: ResetPasswordRequest, request: Request) -> dict[str, Any]:
+        c: sqlite3.Connection = request.app.state.db
+        token_hash = __import__('hashlib').sha256(req.token.encode()).hexdigest()
+        row = c.execute(
+            "SELECT user_id FROM password_resets WHERE token_hash = ? AND expires_at > ?",
+            (token_hash, datetime.datetime.now(datetime.UTC).isoformat()),
+        ).fetchone()
+        if not row:
+            raise HTTPException(400, "Invalid or expired token")
+        if len(req.password) < 8 or len(req.password) > 128:
+            raise HTTPException(422, "Password must be 8-128 chars")
+        c.execute("DELETE FROM password_resets WHERE token_hash = ?", (token_hash,))
+        c.execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (hash_password(req.password), row["user_id"]),
+        )
+        c.commit()
+        return {"ok": True}
 
     @app.post("/api/runs")
     async def start_run(req: StartRunRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
@@ -263,12 +306,12 @@ def create_webui_app() -> FastAPI:
         return {"id": job.id}
 
     @app.post("/api/runs/{id}/publish")
-    def publish_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row | None = Depends(get_current_user)) -> dict[str, Any]:  # noqa: B008
+    def publish_run(id: str, req: PublishRequest, request: Request, user: sqlite3.Row = Depends(require_user)) -> dict[str, Any]:  # noqa: B008
         c: sqlite3.Connection = request.app.state.db
         
         row = c.execute("SELECT id, user_id, is_public FROM runs WHERE id = ?", (id,)).fetchone()
         if row:
-            if row["user_id"] and (not user or row["user_id"] != user["id"]):
+            if row["user_id"] != user["id"]:
                 raise HTTPException(403, "Not your run")
             c.execute("UPDATE runs SET is_public = 1, title = COALESCE(?, title) WHERE id = ?", (req.title, id))
             c.commit()
@@ -292,7 +335,7 @@ def create_webui_app() -> FastAPI:
              prompt_tokens, completion_tokens, cost_usd, is_public, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)""",
             (
-                job.id, user["id"] if user else None, title, job.request_sanitized.get("question", ""), seed_excerpt,
+                job.id, user["id"], title, job.request_sanitized.get("question", ""), seed_excerpt,
                 json.dumps(job.request_sanitized), json.dumps(job.result), json.dumps(job.models),
                 complete_evt.get("prompt_tokens_total", 0), complete_evt.get("completion_tokens_total", 0),
                 complete_evt.get("cost_usd"), datetime.datetime.now(datetime.UTC).isoformat()

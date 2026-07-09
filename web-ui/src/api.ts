@@ -73,6 +73,8 @@ export const api = {
   login: (email: string, password: string) => request('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => request('/api/auth/logout', { method: 'POST' }),
   me: () => request('/api/auth/me'),
+  forgotPassword: (email: string) => request('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  resetPassword: (token: string, password: string) => request('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   chat: (id: string, body: Record<string, unknown>) => request(`/api/runs/${id}/chat`, { method: 'POST', body: JSON.stringify(body) }),
   report: (id: string, body: Record<string, unknown>) => request(`/api/runs/${id}/report`, { method: 'POST', body: JSON.stringify(body) }),
 };

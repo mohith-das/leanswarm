@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { api } from '../api';
 import { collectCredentials, getOverrides } from '../keys';
 import ForceGraph from '../components/ForceGraph';
@@ -30,6 +30,7 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [graphView, setGraphView] = useState<'agents' | 'knowledge'>('agents');
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const [reportContent, setReportContent] = useState<{ title: string; sections: Array<{ heading: string; content: string }> } | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
@@ -73,6 +74,8 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
       eventSourceRef.current?.close();
     };
   }, [id, isGallery]);
+
+  useEffect(() => { api.me().then(r => setMe(r.email)).catch(() => setMe(null)); }, []);
 
   function handleEvent(evt: any) {
     switch (evt.type) {
@@ -124,7 +127,7 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
       await api.publishRun(id);
       setSaveMsg('Published — visible in the gallery.');
     } catch (err: any) {
-      setSaveMsg(err.message);
+      setSaveMsg(err.status === 401 ? 'Sign in to publish runs.' : err.message);
     }
   }
 
@@ -302,6 +305,12 @@ export default function RunPage({ readOnly = false }: { readOnly?: boolean }) {
         ))}
       </details>
 
+      {!isGallery && !me && (
+        <div className="card" style={{ marginBottom: '1rem' }}>
+          <p className="muted">Sign in to save and publish your results to the public gallery.</p>
+          <Link to="/login" className="btn">Sign in</Link>
+        </div>
+      )}
       {!isGallery && (
         <div className="action-bar">
           <button className="btn" onClick={handleDownload}>Download JSON</button>

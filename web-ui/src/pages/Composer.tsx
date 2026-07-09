@@ -1,5 +1,5 @@
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { api } from '../api';
 import { collectCredentials, getOverrides, getAvailableProviders, PROVIDER_MODELS, PROVIDER_LABELS, getSearchCredentials } from '../keys';
 import CostEstimate from '../components/CostEstimate';
@@ -39,6 +39,7 @@ export default function Composer() {
   const [doctorLoading, setDoctorLoading] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [me, setMe] = useState<string | null>(null);
 
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [useSearch, setUseSearch] = useState(false);
@@ -59,6 +60,8 @@ export default function Composer() {
       if (r.group_size) setGroupSize(Number(r.group_size));
     } catch { /* ignore */ }
   }, []);
+
+  useEffect(() => { api.me().then(r => setMe(r.email)).catch(() => setMe(null)); }, []);
 
   const availableProviders = getAvailableProviders();
   const hasKeys = availableProviders.length > 0;
@@ -180,6 +183,12 @@ export default function Composer() {
 
   return (
     <div className="composer">
+      {!me && (
+        <div className="card" style={{ borderColor: 'var(--color-accent)', opacity: 0.9 }}>
+          <p className="muted">You're running as a guest. No login required — enter a seed document and question to start. <Link to="/login">Sign in</Link> to save runs and publish to the public gallery.</p>
+        </div>
+      )}
+
       <div className="card">
         <label>Title (optional)</label>
         <input className="w-full" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Untitled simulation" />

@@ -23,10 +23,16 @@ class WebUISettings(BaseModel):
     runs_per_hour_per_ip: int = 10
     retention_seconds: int = 7200
     chats_per_hour_per_ip: int = 120
+    smtp_host: str | None = None
+    smtp_port: int = 465
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    from_email: str = "noreply@leanswarm.local"
 
     @classmethod
     def from_env(cls) -> WebUISettings:
         data_dir = Path(os.getenv("LEANSWARM_UI_DATA_DIR", ".leanswarm/ui"))
+        smtp_host = os.getenv("LEANSWARM_SMTP_HOST")
         return cls(
             data_dir=data_dir,
             allow_signup=_env_flag("LEANSWARM_UI_ALLOW_SIGNUP", True),
@@ -38,6 +44,11 @@ class WebUISettings(BaseModel):
             runs_per_hour_per_ip=int(os.getenv("LEANSWARM_UI_RUNS_PER_HOUR_PER_IP", "10")),
             retention_seconds=int(os.getenv("LEANSWARM_UI_RETENTION_SECONDS", "7200")),
             chats_per_hour_per_ip=int(os.getenv("LEANSWARM_UI_CHATS_PER_HOUR_PER_IP", "120")),
+            smtp_host=smtp_host or None,
+            smtp_port=int(os.getenv("LEANSWARM_SMTP_PORT", "465")),
+            smtp_username=os.getenv("LEANSWARM_SMTP_USERNAME"),
+            smtp_password=os.getenv("LEANSWARM_SMTP_PASSWORD"),
+            from_email=os.getenv("LEANSWARM_FROM_EMAIL", "noreply@leanswarm.local"),
         )
 
     def ensure_dirs(self) -> None:

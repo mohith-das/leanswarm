@@ -1,4 +1,5 @@
 import json
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -126,6 +127,7 @@ def test_publish_and_gallery(client):
         "live": False,
         "models": {"flagship": "x", "standard": "y", "cheap": "z"}
     }
+    client.post("/api/auth/register", json={"email": "pub@example.com", "password": "password123"})
     run_id = client.post("/api/runs", json=req).json()["id"]
     wait_for_run(client, run_id)
 
@@ -229,3 +231,75 @@ def test_get_run_privacy(client):
     client.post("/api/auth/logout")
     res = client.get(f"/api/runs/{run_id}")
     assert res.status_code == 200
+
+def test_forgot_password_no_smtp(client):
+    res = client.post("/api/auth/forgot-password", json={"email": "user@example.com"})
+    assert res.status_code == 500
+
+def test_forgot_password_flow(monkeypatch, tmp_path):
+    monkeypatch.setenv("LEANSWARM_UI_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("LEANSWARM_SMTP_HOST", "smtp.example.com")
+    monkeypatch.setenv("LEANSWARM_SMTP_PORT", "465")
+    monkeypatch.setenv("LEANSWARM_SMTP_USERNAME", "user")
+    monkeypatch.setenv("LEANSWARM_SMTP_PASSWORD", "pass")
+    monkeypatch.setenv("LEANSWARM_FROM_EMAIL", "noreply@example.com")
+
+    app = create_webui_app()
+    with TestClient(app) as client:
+        res = client.post(
+            "/api/auth/register",
+            json={"email": "test@example.com", "password": "oldpassword"},
+        )
+        assert res.status_code == 200
+
+        with patch("leanswarm.webui.app.send_password_reset_email") as mock_send:
+            res = client.post(
+                "/api/auth/forgot-password", json={"email": "unknown@example.com"}
+            )
+            assert res.status_code == 200
+            assert res.json() == {"ok": True}
+            mock_send.assert_not_called()
+
+        with patch("leanswarm.webui.app.send_password_reset_email") as mock_send:
+            res = client.post(
+                "/api/auth/forgot-password", json={"email": "test@example.com"}
+            )
+            assert res.status_code == 200
+            assert res.json() == {"ok": True}
+            mock_send.assert_called_once()
+            reset_url = mock_send.call_args[0][1]
+            assert "token=" in reset_url
+            token = reset_url.split("token=")[1]
+
+        res = client.post(
+            "/api/auth/reset-password",
+            json={"token": "bogus-token", "password": "newpassword1"},
+        )
+        assert res.status_code == 400
+
+        res = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "password": "newpassword1"},
+        )
+        assert res.status_code == 200
+        assert res.json() == {"ok": True}
+
+        res = client.post(
+            "/api/auth/login",
+            json={"email": "test@example.com", "password": "oldpassword"},
+        )
+        assert res.status_code == 401
+
+        res = client.post(
+            "/api/auth/login",
+            json={"email": "test@example.com", "password": "newpassword1"},
+        )
+        assert res.status_code == 200
+
+        client.post("/api/auth/logout")
+
+        res = client.post(
+            "/api/auth/reset-password",
+            json={"token": token, "password": "anotherpw1"},
+        )
+        assert res.status_code == 400

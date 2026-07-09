@@ -96,6 +96,8 @@ function Shell() {
           <Route path="/gallery/:id" element={<RunPage readOnly />} />
           <Route path="/login" element={<AuthPage type="login" onAuthChange={refreshMe} />} />
           <Route path="/register" element={<AuthPage type="register" onAuthChange={refreshMe} />} />
+          <Route path="/forgot-password" element={<AuthPage type="forgot" />} />
+          <Route path="/reset-password" element={<AuthPage type="reset" onAuthChange={refreshMe} />} />
         </Routes>
       </main>
       {keysOpen && <KeysModal onClose={() => setKeysOpen(false)} />}
