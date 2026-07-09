@@ -84,7 +84,7 @@ function Shell() {
               <button className="btn" onClick={handleLogout}>Logout</button>
             </div>
           ) : (
-            <Link to="/login">Sign in</Link>
+            <Link to="/login" className="btn">Sign in</Link>
           )}
         </div>
       </aside>
