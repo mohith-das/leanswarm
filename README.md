@@ -114,7 +114,7 @@ npm run dev
 pip install leanswarm
 leanswarm ui
 ```
-Open `http://127.0.0.1:8000` in your browser. The UI supports both mock and live modes. You can bring your own API keys, which are stored exclusively in your browser and used securely in memory per run.
+Open `http://127.0.0.1:8000` in your browser. The UI supports both mock and live modes, and features a dark/light theme, a Composer for running simulations, and a tabbed Gallery for exploring public and personal simulation histories. You can bring your own API keys, which are stored exclusively in your browser and used securely in memory per run.
 
 **Hosting configuration:**
 To run behind a TLS proxy, set `LEANSWARM_UI_SECURE_COOKIES=true`. To restrict registration, set `LEANSWARM_UI_ALLOW_SIGNUP=false`.

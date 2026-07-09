@@ -6,6 +6,12 @@ The format is based on Keep a Changelog and the project follows Semantic Version
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-07-08
+
+### Added
+- **Gallery Tabs**: The gallery now supports "Public" and "Personal" tabs with search filtering for signed-in users.
+- **Theme & Branding**: Updated color scheme to perfectly match the `leanswarm.me` landing page. Added light/dark mode support to the landing page and a custom SVG favicon. 
+- **Layout Fixes**: Moved the theme toggle button to a dedicated header section in the Composer to prevent overlap with the simulation title form.
 ## [0.4.2] - 2026-07-06
 
 ### Added
