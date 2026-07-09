@@ -12,14 +12,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #0c0a09;
-    --surface: #1c1917;
-    --border: #292524;
-    --text: #fafaf9;
-    --muted: #a8a29e;
-    --accent: #2dd4bf;
-    --accent-hover: #5eead4;
-    --danger: #f87171;
+    --bg: #08101d;
+    --surface: #111d30;
+    --border: rgba(166, 184, 255, 0.16);
+    --text: #ecf2ff;
+    --muted: #a7b3cf;
+    --accent: #a78bfa;
+    --accent-hover: #c4b5fd;
+    --danger: #fb7185;
   }
 }
 
@@ -35,14 +35,14 @@ html[data-theme="light"] {
 }
 
 html[data-theme="dark"] {
-  --bg: #0c0a09;
-  --surface: #1c1917;
-  --border: #292524;
-  --text: #fafaf9;
-  --muted: #a8a29e;
-  --accent: #2dd4bf;
-  --accent-hover: #5eead4;
-  --danger: #f87171;
+  --bg: #08101d;
+  --surface: #111d30;
+  --border: rgba(166, 184, 255, 0.16);
+  --text: #ecf2ff;
+  --muted: #a7b3cf;
+  --accent: #a78bfa;
+  --accent-hover: #c4b5fd;
+  --danger: #fb7185;
 }
 
 body {
@@ -64,6 +64,11 @@ body {
   background: var(--surface);
   display: flex;
   flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  box-sizing: border-box;
 }
 
 .main-content {
@@ -74,10 +79,15 @@ body {
 }
 
 .logo {
-  color: var(--accent);
+  color: var(--text);
   font-weight: bold;
   font-size: 1.5rem;
   margin-bottom: 2rem;
+  letter-spacing: -0.03em;
+}
+
+.logo-swarm {
+  color: #a78bfa;
 }
 
 .logo-link {
@@ -595,6 +605,38 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
   margin-bottom: 0.5rem;
 }
 
+.runs-section {
+  flex: 1;
+  min-height: 0;
+}
+
+.history-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.4rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  margin-bottom: 0.5rem;
+}
+
+.history-search:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.sidebar-runs-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.25rem;
+}
+
 .sidebar-run-link {
   display: flex;
   flex-direction: column;
@@ -843,4 +885,32 @@ input[type="text"], input[type="email"], input[type="password"], input[type="num
 .github-badge-text span {
   font-size: 0.72rem;
   color: var(--muted);
+}
+
+.main-header {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.theme-toggle-btn {
+  padding: 0.4rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 1.25rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.theme-toggle-btn:hover {
+  background: var(--surface);
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
 }

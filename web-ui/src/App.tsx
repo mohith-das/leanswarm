@@ -12,6 +12,7 @@ function Shell() {
   const [me, setMe] = useState<string | null>(null);
   const [myRuns, setMyRuns] = useState<any[]>([]);
   const [keysOpen, setKeysOpen] = useState(false);
+  const [runSearch, setRunSearch] = useState('');
 
   const refreshMe = useCallback(() => {
     api.me().then((r) => setMe(r.email)).catch(() => setMe(null));
@@ -38,28 +39,39 @@ function Shell() {
     localStorage.setItem('leanswarm.theme', next);
   }
 
+  const filteredRuns = myRuns.filter(r => (r.title || r.question || '').toLowerCase().includes(runSearch.toLowerCase()));
+
   return (
     <div className="app-layout">
       <aside className="sidebar">
-        <Link to="/" className="logo-link">
-          <h1 className="logo">leanswarm</h1>
-        </Link>
-        <Link to="/" className="btn btn-accent w-full">+ New simulation</Link>
+          <Link to="/" className="logo-link">
+            <h1 className="logo">Lean<span className="logo-swarm">Swarm</span></h1>
+          </Link>
+          <Link to="/simulate" className="btn btn-accent w-full">+ New simulation</Link>
+          <Link to="/gallery" className="btn w-full mt-2">
+            {me ? "Personal Gallery" : "Public Gallery"}
+          </Link>
         {me && (
-          <div className="sidebar-section">
-            <div className="sidebar-heading">My runs</div>
-            {myRuns.length === 0 && <div className="muted">No saved runs yet.</div>}
-            {myRuns.map((r) => (
-              <Link key={r.id} to={`/run/${r.id}`} className="sidebar-run-link">
-                <span className="run-title">{r.title || r.question}</span>
-                <span className="muted">{new Date(r.created_at).toLocaleDateString()}</span>
-              </Link>
-            ))}
+          <div className="sidebar-section runs-section">
+            <div className="sidebar-heading">Sim. History</div>
+            <input 
+              type="text" 
+              placeholder="Search history..." 
+              value={runSearch} 
+              onChange={(e) => setRunSearch(e.target.value)} 
+              className="history-search" 
+            />
+            <div className="sidebar-runs-list">
+              {filteredRuns.length === 0 && <div className="muted">No runs found.</div>}
+              {filteredRuns.map((r) => (
+                <Link key={r.id} to={`/run/${r.id}`} className="sidebar-run-link">
+                  <span className="run-title">{r.title || r.question}</span>
+                  <span className="muted">{new Date(r.created_at).toLocaleDateString()}</span>
+                </Link>
+              ))}
+            </div>
           </div>
         )}
-        <nav className="sidebar-section">
-          <Link to="/gallery">Gallery</Link>
-        </nav>
         <div className="sidebar-footer">
           <a
             className="github-badge"
@@ -76,7 +88,6 @@ function Shell() {
               <span>Audit on GitHub</span>
             </span>
           </a>
-          <button className="btn theme-toggle" onClick={toggleTheme}>Toggle theme</button>
           <button className="btn" onClick={() => setKeysOpen(true)}>API keys</button>
           {me ? (
             <div className="auth-area">
@@ -89,11 +100,17 @@ function Shell() {
         </div>
       </aside>
       <main className="main-content">
+        <header className="main-header">
+          <button className="btn theme-toggle-btn" onClick={toggleTheme} title="Toggle theme">
+            🌓
+          </button>
+        </header>
         <Routes>
-          <Route path="/" element={<Composer />} />
+          <Route path="/" element={<Gallery me={!!me} />} />
           <Route path="/run/:id" element={<RunPage />} />
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/gallery" element={<Gallery me={!!me} />} />
           <Route path="/gallery/:id" element={<RunPage readOnly />} />
+          <Route path="/simulate" element={<Composer />} />
           <Route path="/login" element={<AuthPage type="login" onAuthChange={refreshMe} />} />
           <Route path="/register" element={<AuthPage type="register" onAuthChange={refreshMe} />} />
           <Route path="/forgot-password" element={<AuthPage type="forgot" />} />

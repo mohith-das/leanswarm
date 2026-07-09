@@ -64,49 +64,58 @@ export default function AuthPage({ type, onAuthChange }: { type: 'login' | 'regi
     : 'Set a new password';
 
   return (
-    <div className="auth-card card">
-      <h2>{heading}</h2>
-      <form onSubmit={handleSubmit}>
-        {(type === 'login' || type === 'register' || type === 'forgot') && (
+    <>
+      <div className="auth-card card">
+        <h2>{heading}</h2>
+        <form onSubmit={handleSubmit}>
+          {(type === 'login' || type === 'register' || type === 'forgot') && (
+            <>
+              <label>Email</label>
+              <input className="w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            </>
+          )}
+          {(type === 'login' || type === 'register' || type === 'reset') && (
+            <>
+              <label>Password</label>
+              <input className="w-full" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
+            </>
+          )}
+          {(type === 'register' || type === 'reset') && (
+            <>
+              <label>Confirm password</label>
+              <input className="w-full" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+            </>
+          )}
+          {error && <p className="error-text">{error}</p>}
+          {type === 'login' && searchParams.get('reset') === '1' && (
+            <p className="muted">Password has been reset. Sign in with your new password.</p>
+          )}
+          <button className="btn btn-accent w-full" type="submit" disabled={submitting}>
+            {submitting ? 'Please wait…'
+              : type === 'login' ? 'Sign in'
+              : type === 'register' ? 'Sign up'
+              : type === 'forgot' ? 'Send reset link'
+              : 'Reset password'}
+          </button>
+        </form>
+        {type === 'login' ? (
           <>
-            <label>Email</label>
-            <input className="w-full" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <p className="muted">Don't have an account? <Link to="/register">Sign up</Link></p>
+            <p className="muted"><Link to="/forgot-password">Forgot your password?</Link></p>
           </>
+        ) : type === 'register' ? (
+          <p className="muted">Already have an account? <Link to="/login">Sign in</Link></p>
+        ) : (
+          <p className="muted"><Link to="/login">Back to sign in</Link></p>
         )}
-        {(type === 'login' || type === 'register' || type === 'reset') && (
-          <>
-            <label>Password</label>
-            <input className="w-full" type="password" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} required />
-          </>
-        )}
-        {(type === 'register' || type === 'reset') && (
-          <>
-            <label>Confirm password</label>
-            <input className="w-full" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
-          </>
-        )}
-        {error && <p className="error-text">{error}</p>}
-        {type === 'login' && searchParams.get('reset') === '1' && (
-          <p className="muted">Password has been reset. Sign in with your new password.</p>
-        )}
-        <button className="btn btn-accent w-full" type="submit" disabled={submitting}>
-          {submitting ? 'Please wait…'
-            : type === 'login' ? 'Sign in'
-            : type === 'register' ? 'Sign up'
-            : type === 'forgot' ? 'Send reset link'
-            : 'Reset password'}
-        </button>
-      </form>
-      {type === 'login' ? (
-        <>
-          <p className="muted">Don't have an account? <Link to="/register">Sign up</Link></p>
-          <p className="muted"><Link to="/forgot-password">Forgot your password?</Link></p>
-        </>
-      ) : type === 'register' ? (
-        <p className="muted">Already have an account? <Link to="/login">Sign in</Link></p>
-      ) : (
-        <p className="muted"><Link to="/login">Back to sign in</Link></p>
+      </div>
+      {type === 'login' && (
+        <div className="auth-card card" style={{ marginTop: '1.5rem' }}>
+          <h3>Anonymous mode</h3>
+          <p className="muted">No account needed. Run simulations and browse the public gallery without signing in.</p>
+          <Link to="/simulate" className="btn btn-accent w-full">Continue anonymously</Link>
+        </div>
       )}
-    </div>
+    </>
   );
 }

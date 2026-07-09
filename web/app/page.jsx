@@ -152,7 +152,19 @@ export default function Page() {
     : [];
 
   return (
-    <main className="shell">
+    <main className="shell" style={{ position: 'relative' }}>
+      <button
+        className="button button--ghost"
+        onClick={() => {
+          const root = document.documentElement;
+          const current = root.getAttribute("data-theme") || "dark";
+          root.setAttribute("data-theme", current === "dark" ? "light" : "dark");
+        }}
+        style={{ position: 'absolute', top: '1.25rem', right: '0', zIndex: 100, padding: '0.5rem', borderRadius: '8px' }}
+        title="Toggle theme"
+      >
+        🌓
+      </button>
       <section className="hero card">
         <div className="hero__copy">
           <p className="eyebrow">Lean Swarm</p>

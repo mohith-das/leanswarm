@@ -327,13 +327,23 @@ export default function Composer() {
               {doctorResult.map((r, i) => (
                 <li key={i}>
                   {r.model}: {r.ready ? '✓ ready' : `✗ missing ${r.missing?.join(', ')}`}
-                  {r.ping_ms != null && ` — ping ${r.ping_ms}ms`}
-                  {r.ping_error && ` — ${r.ping_error}`}
+                  {r.model.startsWith('ollama/') && r.ping_error ? (
+                    <span className="muted"> — Ollama runs on your machine; this server can't reach it.</span>
+                  ) : (
+                    <>
+                      {r.ping_ms != null && ` — ping ${r.ping_ms}ms`}
+                      {r.ping_error && ` — ${r.ping_error}`}
+                    </>
+                  )}
                 </li>
               ))}
             </ul>
           )}
         </div>
+      )}
+
+      {(effProvider === 'ollama' || effFlagshipProvider === 'ollama' || effStandardProvider === 'ollama' || effCheapProvider === 'ollama') && (
+        <p className="muted" style={{ marginTop: '0.75rem' }}>Ollama models run locally. Install leanswarm on your machine to use them.</p>
       )}
 
       <div className="card">
