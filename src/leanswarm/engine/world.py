@@ -863,9 +863,15 @@ def _sentence_hits(sentences: list[str], label: str, limit: int = 2) -> list[str
     hits: list[str] = []
     patterns = [label]
     patterns.extend(_tokenize(label))
+    
+    compiled_patterns = []
+    for pattern in patterns:
+        if pattern:
+            compiled_patterns.append(re.compile(rf"\b{re.escape(pattern.lower())}\b"))
+            
     for sentence in sentences:
         lower_sentence = sentence.lower()
-        if any(_label_matches_text(lower_sentence, pattern) for pattern in patterns):
+        if any(p.search(lower_sentence) for p in compiled_patterns):
             hits.append(sentence.strip())
         if len(hits) >= limit:
             break

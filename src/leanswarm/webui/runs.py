@@ -112,6 +112,8 @@ class RunManager:
         max_sources: int,
         credentials: dict[str, str],
     ) -> None:
+        import asyncio
+        await asyncio.sleep(0.01)
         async with self.semaphore:
             async def push(event: dict[str, Any]) -> None:
                 if event.get("type") == "tick":
